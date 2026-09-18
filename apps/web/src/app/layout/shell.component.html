@@ -1,0 +1,45 @@
+<header class="topbar">
+  <div class="topbar-inner">
+    <a routerLink="/" class="brand">FPL Insights</a>
+    <nav class="nav nav-desktop" aria-label="Primary">
+      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Home</a>
+      <a routerLink="/teams" routerLinkActive="active">Teams</a>
+      <a routerLink="/players" routerLinkActive="active">Players</a>
+      <a routerLink="/chips" routerLinkActive="active">Chip Strategy</a>
+      <a routerLink="/team" routerLinkActive="active">My Team</a>
+      <a routerLink="/about" routerLinkActive="active">About</a>
+    </nav>
+    <a
+      routerLink="/about"
+      routerLinkActive="active"
+      class="about-mobile"
+      aria-label="About"
+    >
+      About
+    </a>
+    <span class="spacer"></span>
+    <app-deadline-banner />
+  </div>
+</header>
+
+<main class="content">
+  <router-outlet />
+</main>
+
+<nav class="bottom-nav" aria-label="Primary">
+  <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
+    <span>Home</span>
+  </a>
+  <a routerLink="/teams" routerLinkActive="active">
+    <span>Teams</span>
+  </a>
+  <a routerLink="/players" routerLinkActive="active">
+    <span>Players</span>
+  </a>
+  <a routerLink="/chips" routerLinkActive="active">
+    <span>Chips</span>
+  </a>
+  <a routerLink="/team" routerLinkActive="active">
+    <span>My Team</span>
+  </a>
+</nav>

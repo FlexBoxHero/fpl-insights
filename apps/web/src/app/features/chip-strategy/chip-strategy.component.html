@@ -1,0 +1,170 @@
+<div class="page-header">
+  <h1>Chip strategy</h1>
+  <p class="subtitle">
+    You get one Wildcard, Bench Boost, Triple Captain, and Free Hit in GW1–19, then another set in
+    GW20–38. Turn off chips you have already used — the plan only schedules what you still have.
+    Only one chip can be played in a given gameweek.
+  </p>
+</div>
+
+<section class="section-card">
+  <h2>Chips still available</h2>
+  <p class="section-desc">GW1–19 set. Saved on this device. Suggestions update as you toggle.</p>
+  <div class="availability-grid">
+    @for (chip of chipIds; track chip) {
+      <label class="avail-row" [class.off]="!isOn(chip)">
+        <mat-slide-toggle
+          color="primary"
+          [checked]="isOn(chip)"
+          (change)="toggle(chip, $event.checked)"
+        />
+        <span>
+          <strong>{{ chipLabels[chip] }}</strong>
+          <small>{{ chipBlurb[chip] }}</small>
+        </span>
+      </label>
+    }
+  </div>
+</section>
+
+@if (loading() && !strategy()) {
+  <mat-spinner diameter="40" />
+} @else if (!firstHalf()) {
+  <p class="empty">Chip advice unavailable. Ensure the API is running and fixtures are loaded.</p>
+} @else {
+  @let half = firstHalf()!;
+  <section class="section-card half-card">
+    <h2>Recommended plan <span class="range">GW1–19</span></h2>
+    @if (half.expired) {
+      <p class="empty">This half is finished — unused chips from this window have expired.</p>
+    } @else if (half.plan.length === 0) {
+      <p class="empty">No remaining chips selected.</p>
+    } @else {
+      <p class="section-desc">
+        Play from GW{{ strategy()!.as_of_gameweek }} onward. Gameweeks below do not overlap.
+      </p>
+      <ol class="plan-list">
+        @for (step of half.plan; track trackWindow($index, step)) {
+          <li>
+            <span class="gw-badge">GW{{ step.gameweek }}</span>
+            <span [class]="chipClass(step.chip)">{{ step.chip_label }}</span>
+            <div>
+              <strong>{{ step.headline }}</strong>
+              <p>{{ step.reason }}</p>
+              @if (step.player) {
+                <p class="player-line">
+                  Use on
+                  <strong>{{ step.player.web_name }}</strong>
+                  ({{ step.player.position }}, {{ step.player.team }}) vs
+                  {{ step.player.opponents }} ·
+                  {{ step.player.triple_expected_points | number: '1.1-1' }} TC xPts
+                </p>
+              }
+            </div>
+          </li>
+        }
+      </ol>
+    }
+  </section>
+
+  @if (!half.expired) {
+    <h2 class="half-heading">Best time to use</h2>
+    <div class="best-times">
+      @for (chip of chipIds; track chip) {
+        @if (isOn(chip)) {
+          @let advice = chipAdvice(half, chip);
+          @if (advice) {
+            <section class="section-card compact-section">
+              <h2>
+                {{ advice.chip_label }}
+                @if (advice.recommended_gameweek) {
+                  <span class="rec-gw">Play GW{{ advice.recommended_gameweek }}</span>
+                }
+              </h2>
+              <p class="section-desc">{{ chipBlurb[chip] }}</p>
+              @if (advice.windows.length === 0) {
+                <p class="empty">No remaining weeks to rank for this chip.</p>
+              } @else if (chip === 'triple_captain') {
+                <div class="tc-grid">
+                  @for (row of advice.windows; track trackWindow($index, row); let featured = $first) {
+                    <article class="tc-card" [class.featured]="featured">
+                      <header class="tc-card-head">
+                        <span class="gw-badge">GW{{ row.gameweek }}</span>
+                        <span [class]="confidenceClass(row.confidence)">{{ row.confidence }}</span>
+                        @if (featured) {
+                          <span class="rec-gw">Top pick</span>
+                        }
+                        @for (flag of row.flags; track flag) {
+                          <span class="mini-flag">{{ flagLabel(flag) }}</span>
+                        }
+                      </header>
+                      @if (row.player; as cap) {
+                        <div class="tc-player">
+                          <app-club-mark
+                            [team]="cap.team"
+                            [fullName]="cap.team_name"
+                            [teamCode]="cap.team_code"
+                            [size]="28"
+                          />
+                          <div>
+                            <strong>{{ cap.web_name }}</strong>
+                            <span class="muted">{{ cap.position }} · {{ cap.team }}</span>
+                          </div>
+                        </div>
+                        <p class="tc-fixture">
+                          {{ cap.opponents }}
+                          @if (cap.n_fixtures >= 2) {
+                            · Double
+                          } @else if (cap.is_home) {
+                            · Home
+                          } @else {
+                            · Away
+                          }
+                        </p>
+                        <div class="tc-stats">
+                          <div>
+                            <span>Captain xPts</span>
+                            <strong>{{ cap.expected_points | number: '1.1-1' }}</strong>
+                          </div>
+                          <div>
+                            <span>TC xPts</span>
+                            <strong class="tc-xp">{{ cap.triple_expected_points | number: '1.1-1' }}</strong>
+                          </div>
+                          @if (cap.expected_goals) {
+                            <div>
+                              <span>Team xG</span>
+                              <strong>{{ cap.expected_goals | number: '1.1-1' }}</strong>
+                            </div>
+                          }
+                        </div>
+                        <p class="tc-reason">{{ row.reason }}</p>
+                      } @else {
+                        <p class="empty">No captain candidate this week.</p>
+                      }
+                    </article>
+                  }
+                </div>
+              } @else {
+                <ul class="window-list">
+                  @for (row of advice.windows; track trackWindow($index, row)) {
+                    <li>
+                      <div class="window-head">
+                        <strong>GW{{ row.gameweek }}</strong>
+                        <span [class]="confidenceClass(row.confidence)">{{ row.confidence }}</span>
+                        @for (flag of row.flags; track flag) {
+                          <span class="mini-flag">{{ flagLabel(flag) }}</span>
+                        }
+                      </div>
+                      <p class="headline">{{ row.headline }}</p>
+                      <p>{{ row.reason }}</p>
+                    </li>
+                  }
+                </ul>
+              }
+            </section>
+          }
+        }
+      }
+    </div>
+  }
+}

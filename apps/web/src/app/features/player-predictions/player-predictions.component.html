@@ -1,0 +1,222 @@
+<div class="page-header">
+  <h1>Player predictions</h1>
+  <p class="subtitle">Expected points, captaincy, defensive contributions, and market movers for the selected gameweek.</p>
+</div>
+
+<section class="section-card points-section">
+  <h2>Expected points</h2>
+  <p class="section-desc">
+    Top players by model xPts (paginated). Select up to 3 to compare. Full name on player hover.
+  </p>
+
+  <div class="toolbar">
+    <mat-form-field appearance="outline" class="filter">
+      <mat-label>Position</mat-label>
+      <mat-select [value]="positionFilter()" (valueChange)="onPositionChange($event)">
+        <mat-option value="">All</mat-option>
+        <mat-option value="GK">GK</mat-option>
+        <mat-option value="DEF">DEF</mat-option>
+        <mat-option value="MID">MID</mat-option>
+        <mat-option value="FWD">FWD</mat-option>
+      </mat-select>
+    </mat-form-field>
+    @if (compareIds().length > 0) {
+      <button mat-stroked-button type="button" class="clear-compare" (click)="clearCompare()">
+        Clear comparison ({{ compareIds().length }})
+      </button>
+    }
+  </div>
+
+  @if (comparedPlayers().length > 0) {
+    <div class="compare-panel">
+      <h3>Player comparison</h3>
+      <div class="compare-grid">
+        @for (p of comparedPlayers(); track p.player_id) {
+          <div class="compare-card">
+            <div class="compare-head">
+              <strong [matTooltip]="p.full_name">{{ p.web_name }}</strong>
+              <span class="meta">
+                <app-club-mark
+                  [team]="p.team"
+                  [fullName]="p.team_name"
+                  [teamCode]="p.team_code"
+                  [size]="18"
+                />
+                <span>· {{ p.position }}</span>
+              </span>
+            </div>
+            <dl>
+              <div [class.best]="compareBest(comparedPlayers(), 'price', false) === p.player_id">
+                <dt>Price</dt>
+                <dd>£{{ p.price | number: '1.1-1' }}m</dd>
+              </div>
+              <div [class.best]="compareBest(comparedPlayers(), 'expected_points') === p.player_id">
+                <dt>xPts</dt>
+                <dd>{{ p.expected_points | number: '1.1-2' }}</dd>
+              </div>
+              <div [class.best]="compareBest(comparedPlayers(), 'baseline_last_gw') === p.player_id">
+                <dt>Last GW</dt>
+                <dd>{{ p.baseline_last_gw ?? '—' }}</dd>
+              </div>
+              <div [class.best]="compareBest(comparedPlayers(), 'baseline_ep_next') === p.player_id">
+                <dt>FPL ep</dt>
+                <dd>{{ p.baseline_ep_next ?? '—' }}</dd>
+              </div>
+              <div [class.best]="deltaBest(comparedPlayers()) === p.player_id">
+                <dt>Δ vs ep</dt>
+                <dd>
+                  @if (delta(p) !== null) {
+                    {{ delta(p)! | number: '1.1-2' }}
+                  } @else {
+                    —
+                  }
+                </dd>
+              </div>
+            </dl>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  @if (loading()) {
+    <mat-spinner diameter="36" />
+  } @else if (totalPlayers() === 0) {
+    <p class="empty">No player predictions for this gameweek.</p>
+  } @else {
+    <div class="table-wrap">
+      <table mat-table [dataSource]="pagedRows()" class="pred-table data-table">
+        <ng-container matColumnDef="compare">
+          <th mat-header-cell *matHeaderCellDef matTooltip="{{ tooltips.compare }}"></th>
+          <td mat-cell *matCellDef="let row">
+            <mat-checkbox
+              [checked]="isCompared(row)"
+              [disabled]="!isCompared(row) && !canAddCompare()"
+              (change)="toggleCompare(row, $event.checked)"
+              aria-label="Compare {{ row.web_name }}"
+            />
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="player">
+          <th mat-header-cell *matHeaderCellDef>Player</th>
+          <td mat-cell *matCellDef="let row" [matTooltip]="row.full_name">{{ row.web_name }}</td>
+        </ng-container>
+        <ng-container matColumnDef="team">
+          <th mat-header-cell *matHeaderCellDef>Team</th>
+          <td mat-cell *matCellDef="let row">
+            <app-club-mark [team]="row.team" [fullName]="row.team_name" [teamCode]="row.team_code" />
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="pos">
+          <th mat-header-cell *matHeaderCellDef>Pos</th>
+          <td mat-cell *matCellDef="let row">{{ row.position }}</td>
+        </ng-container>
+        <ng-container matColumnDef="price">
+          <th mat-header-cell *matHeaderCellDef>Price</th>
+          <td mat-cell *matCellDef="let row">£{{ row.price | number: '1.1-1' }}m</td>
+        </ng-container>
+        <ng-container matColumnDef="xpts">
+          <th mat-header-cell *matHeaderCellDef matTooltip="{{ tooltips.xpts }}">xPts</th>
+          <td mat-cell *matCellDef="let row">{{ row.expected_points | number: '1.1-2' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="lastGw">
+          <th mat-header-cell *matHeaderCellDef matTooltip="{{ tooltips.lastGw }}">Last GW</th>
+          <td mat-cell *matCellDef="let row">{{ row.baseline_last_gw ?? '—' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="epNext">
+          <th mat-header-cell *matHeaderCellDef matTooltip="{{ tooltips.epNext }}">FPL ep</th>
+          <td mat-cell *matCellDef="let row">{{ row.baseline_ep_next ?? '—' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="delta">
+          <th mat-header-cell *matHeaderCellDef matTooltip="{{ tooltips.delta }}">Δ vs ep</th>
+          <td
+            mat-cell
+            *matCellDef="let row"
+            [class.positive]="(delta(row) ?? 0) > 0"
+            [class.negative]="(delta(row) ?? 0) < 0"
+          >
+            @if (delta(row) !== null) {
+              {{ delta(row)! | number: '1.1-2' }}
+            } @else {
+              —
+            }
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns" [class.row-selected]="isCompared(row)"></tr>
+      </table>
+    </div>
+    <mat-paginator
+      class="points-paginator"
+      [length]="totalPlayers()"
+      [pageIndex]="pageIndex()"
+      [pageSize]="pageSize()"
+      [pageSizeOptions]="pageSizeOptions"
+      (page)="onPage($event)"
+      showFirstLastButtons
+      aria-label="Player predictions pages"
+    />
+  }
+</section>
+
+<div class="insights-row">
+  <section class="section-card compact-section">
+    <h2 matTooltip="{{ tooltips.captain }}">Captain tracker</h2>
+    <p class="section-desc">Top {{ captainPreview().length }} by captain xP.</p>
+    @if (loadingCaptain()) {
+      <mat-spinner diameter="28" />
+    } @else if (captainPreview().length === 0) {
+      <p class="empty">No captain data.</p>
+    } @else {
+      <div class="table-wrap mini-table">
+        <table mat-table [dataSource]="captainPreview()" class="pred-table data-table compact">
+          <ng-container matColumnDef="rank">
+            <th mat-header-cell *matHeaderCellDef>#</th>
+            <td mat-cell *matCellDef="let row; let i = index">{{ i + 1 }}</td>
+          </ng-container>
+          <ng-container matColumnDef="player">
+            <th mat-header-cell *matHeaderCellDef>Player</th>
+            <td mat-cell *matCellDef="let row" [matTooltip]="row.full_name">{{ row.web_name }}</td>
+          </ng-container>
+          <ng-container matColumnDef="captainXp">
+            <th mat-header-cell *matHeaderCellDef>Cap xP</th>
+            <td mat-cell *matCellDef="let row">{{ row.captain_expected_points | number: '1.1-1' }}</td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="captainColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: captainColumns"></tr>
+        </table>
+      </div>
+    }
+  </section>
+
+  <section class="section-card compact-section">
+    <h2 matTooltip="{{ tooltips.defensive }}">Defensive contributions</h2>
+    <p class="section-desc">Top {{ defensivePreview().length }} likelihood.</p>
+    @if (loadingDef()) {
+      <mat-spinner diameter="28" />
+    } @else if (defensivePreview().length === 0) {
+      <p class="empty">No estimates.</p>
+    } @else {
+      <div class="table-wrap mini-table">
+        <table mat-table [dataSource]="defensivePreview()" class="pred-table data-table compact">
+          <ng-container matColumnDef="player">
+            <th mat-header-cell *matHeaderCellDef>Player</th>
+            <td mat-cell *matCellDef="let row" [matTooltip]="row.full_name">{{ row.web_name }}</td>
+          </ng-container>
+          <ng-container matColumnDef="likelihood">
+            <th mat-header-cell *matHeaderCellDef>%</th>
+            <td mat-cell *matCellDef="let row">{{ pct(row.likelihood) | number: '1.0-0' }}%</td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="defColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: defColumns"></tr>
+        </table>
+      </div>
+    }
+  </section>
+</div>
+
+@if (loadingMovers() && !dashboard()) {
+  <mat-spinner diameter="36" />
+} @else if (dashboard()) {
+  <app-market-movers [dashboard]="dashboard()!" />
+}

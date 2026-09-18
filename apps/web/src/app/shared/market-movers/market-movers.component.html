@@ -1,0 +1,14 @@
+<div class="movers">
+  @for (group of groups(); track group.heading) {
+    <h2 class="group-title">{{ group.heading }}</h2>
+    <div class="grid-2">
+      @for (section of group.sections; track section.title + section.metric) {
+        <section class="section-card">
+          <h2>{{ section.title }}</h2>
+          <p class="section-desc">{{ section.desc }}</p>
+          <app-mover-table [rows]="section.rows" [metric]="section.metric" />
+        </section>
+      }
+    </div>
+  }
+</div>

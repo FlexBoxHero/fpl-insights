@@ -1,0 +1,1 @@
+"""Shared FPL insights library."""

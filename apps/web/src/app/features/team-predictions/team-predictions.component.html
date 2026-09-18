@@ -1,0 +1,261 @@
+<div class="page-header">
+  <h1>Team predictions</h1>
+  <p class="subtitle">
+    Model-based fixture difficulty, clean sheet odds, and scoring chances for upcoming fixtures.
+  </p>
+</div>
+
+<section class="section-card">
+  <h2>Fixture difficulty</h2>
+  <p class="section-desc">
+    Average difficulty over the next <strong>{{ fdrFixtureCount() }}</strong> fixtures. Ratings use our strength model
+    (attack/defence from results + weaker prior for newly promoted sides), blended with FPL fixture FDR where needed.
+    Colours are relative to this gameweek's upcoming set (frozen at weekly inference), so easier vs harder games in
+    <em>this</em> window stand out even when the league is tight.
+    @if (fdrModelTag()) {
+      <span class="model-tag">API model: {{ fdrModelTag() }}</span>
+    }
+  </p>
+  <div class="fdr-legend" aria-label="Fixture difficulty scale">
+    @for (tier of fdrLegend; track tier.level) {
+      <span [class]="diffClass(tier.level)">{{ tier.label }}</span>
+    }
+  </div>
+  <div class="section-controls">
+    <div class="slider-block">
+      <label>Fixtures: {{ fdrFixtureCount() }}</label>
+      <mat-slider [min]="minFixtureWindow" [max]="maxFixtureWindow" step="1" discrete showTickMarks>
+        <input
+          matSliderThumb
+          [value]="fdrFixtureCount()"
+          (valueChange)="onFdrFixtureCountChange($event)"
+        />
+      </mat-slider>
+    </div>
+    <mat-form-field appearance="outline">
+      <mat-label>Sort by</mat-label>
+      <mat-select [value]="fdrSort()" (valueChange)="fdrSort.set($event)">
+        <mat-option value="easiest">Easiest runs first</mat-option>
+        <mat-option value="hardest">Hardest runs first</mat-option>
+        <mat-option value="name">Team name</mat-option>
+      </mat-select>
+    </mat-form-field>
+  </div>
+
+  @if (loadingFdr()) {
+    <mat-spinner diameter="36" />
+  } @else if (sortedFixtureRuns().length === 0) {
+    <p class="empty">No upcoming fixtures in range. Run ETL and inference.</p>
+  } @else {
+    <div class="table-wrap">
+      <table mat-table [dataSource]="sortedFixtureRuns()" class="pred-table data-table">
+        <ng-container matColumnDef="team">
+          <th mat-header-cell *matHeaderCellDef>Team</th>
+          <td mat-cell *matCellDef="let row">
+            <app-club-mark
+              [shortName]="row.short_name"
+              [fullName]="row.team_name"
+              [teamCode]="row.team_code"
+            />
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="overall">
+          <th mat-header-cell *matHeaderCellDef>Overall</th>
+          <td mat-cell *matCellDef="let row">
+            <span [class]="overallDiffClass(row.overall_difficulty_level ?? row.overall_fdr)">{{
+              diffLabel(row.overall_difficulty_level ?? row.overall_fdr, row.overall_difficulty_label)
+            }}</span>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="fixtures">
+          <th mat-header-cell *matHeaderCellDef>Next {{ fdrFixtureCount() }} fixtures</th>
+          <td mat-cell *matCellDef="let row">
+            <div class="fixture-cell">
+              <div class="fixture-strip">
+                @for (fx of row.fixtures; track $index) {
+                  <span
+                    [class]="diffClass(fx.difficulty_level ?? fx.fdr)"
+                    [title]="'GW' + fx.gameweek_number + ' · ' + diffLabel(fx.difficulty_level ?? fx.fdr, fx.difficulty_label)"
+                  >
+                    {{ fixtureChipLabel(fx) }}
+                  </span>
+                }
+              </div>
+            </div>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="fdrColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: fdrColumns"></tr>
+      </table>
+    </div>
+  }
+</section>
+
+<section class="section-card">
+  <h2>Clean sheet odds</h2>
+  <p class="section-desc">
+    Predicted clean sheet % per fixture (logistic model from historical results; not raw Poisson).
+    Typical range is about 10–40%, not 80%+.
+    Pill colours match the fixture difficulty scale (green = strong, red = weak).
+  </p>
+  <div class="fdr-legend" aria-label="Outlook strength scale">
+    @for (tier of opportunityLegend; track tier.level) {
+      <span [class]="diffClass(tier.level)">{{ tier.label }}</span>
+    }
+  </div>
+  <!-- Fixtures window selector bypassed for now; outlook uses a fixed count.
+  <div class="section-controls">
+    <div class="slider-block">
+      <label>Fixtures: {{ outlookGwCount() }}</label>
+      <mat-slider [min]="minFixtureWindow" [max]="maxFixtureWindow" step="1" discrete showTickMarks>
+        <input matSliderThumb [value]="outlookGwCount()" (valueChange)="onOutlookCountChange($event)" />
+      </mat-slider>
+    </div>
+  </div>
+  -->
+  @if (loadingCs()) {
+    <mat-spinner diameter="36" />
+  } @else if (cleanSheets().length === 0) {
+    <p class="empty">No clean sheet predictions for this window.</p>
+  } @else {
+    <div class="table-wrap">
+      <table mat-table [dataSource]="cleanSheets()" class="pred-table data-table">
+        <ng-container matColumnDef="team">
+          <th mat-header-cell *matHeaderCellDef>Team</th>
+          <td mat-cell *matCellDef="let row">
+            <app-club-mark
+              [shortName]="row.short_name"
+              [fullName]="row.team_name"
+              [teamCode]="row.team_code"
+            />
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="overall">
+          <th mat-header-cell *matHeaderCellDef>Avg CS%</th>
+          <td mat-cell *matCellDef="let row">{{ pct(row.avg_clean_sheet_prob) | number: '1.0-1' }}%</td>
+        </ng-container>
+        <ng-container matColumnDef="fixtures">
+          <th mat-header-cell *matHeaderCellDef>By fixture</th>
+          <td mat-cell *matCellDef="let row">
+            <div class="fixture-cell" (click)="$event.stopPropagation()">
+              <div class="fixture-strip">
+                @for (fx of row.fixtures; track $index) {
+                  <button
+                    type="button"
+                    class="fx-pill"
+                    [ngClass]="opportunityClass(pct(fx.value), 'cs')"
+                    [class.open]="isPillOpen('cs', row.team_id, $index)"
+                    [attr.aria-expanded]="isPillOpen('cs', row.team_id, $index)"
+                    (click)="toggleMetricPill('cs', row.team_id, $index, $event)"
+                  >
+                    <span>{{ fixtureChipLabel(fx) }}</span>
+                    <span class="fx-extra">{{ pct(fx.value) | number: '1.0-0' }}%</span>
+                  </button>
+                }
+              </div>
+              @if (openMetricFixture('cs', row); as fx) {
+                <p class="fx-note">
+                  @if (fx.gameweek_number) {
+                    GW{{ fx.gameweek_number }} ·
+                  }
+                  {{ pct(fx.value) | number: '1.0-0' }}% clean sheet ·
+                  {{ fx.is_home ? 'Home' : 'Away' }}
+                </p>
+              }
+            </div>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="metricColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: metricColumns"></tr>
+      </table>
+    </div>
+  }
+</section>
+
+<section class="section-card">
+  <h2>Projected goals</h2>
+  <p class="section-desc">
+    Probability the team scores in each upcoming fixture; [xG] is expected goals from the Poisson model.
+    Same pill colours as above (green = strong).
+  </p>
+  <div class="fdr-legend" aria-label="Outlook strength scale">
+    @for (tier of opportunityLegend; track tier.level) {
+      <span [class]="diffClass(tier.level)">{{ tier.label }}</span>
+    }
+  </div>
+  <!-- Fixtures window selector bypassed for now; outlook uses a fixed count.
+  <div class="section-controls">
+    <div class="slider-block">
+      <label>Fixtures: {{ outlookGwCount() }}</label>
+      <mat-slider [min]="minFixtureWindow" [max]="maxFixtureWindow" step="1" discrete showTickMarks>
+        <input matSliderThumb [value]="outlookGwCount()" (valueChange)="onOutlookCountChange($event)" />
+      </mat-slider>
+    </div>
+  </div>
+  -->
+  @if (loadingGoals()) {
+    <mat-spinner diameter="36" />
+  } @else if (goalsOutlook().length === 0) {
+    <p class="empty">No goal projections for this window.</p>
+  } @else {
+    <div class="table-wrap">
+      <table mat-table [dataSource]="goalsOutlook()" class="pred-table data-table">
+        <ng-container matColumnDef="team">
+          <th mat-header-cell *matHeaderCellDef>Team</th>
+          <td mat-cell *matCellDef="let row">
+            <app-club-mark
+              [shortName]="row.short_name"
+              [fullName]="row.team_name"
+              [teamCode]="row.team_code"
+            />
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="overall">
+          <th mat-header-cell *matHeaderCellDef>Avg score%</th>
+          <td mat-cell *matCellDef="let row">{{ pct(row.avg_score_prob) | number: '1.0-1' }}%</td>
+        </ng-container>
+        <ng-container matColumnDef="fixtures">
+          <th mat-header-cell *matHeaderCellDef>By fixture</th>
+          <td mat-cell *matCellDef="let row">
+            <div class="fixture-cell" (click)="$event.stopPropagation()">
+              <div class="fixture-strip">
+                @for (fx of row.fixtures; track $index) {
+                  <button
+                    type="button"
+                    class="fx-pill"
+                    [ngClass]="opportunityClass(pct(fx.value), 'goals')"
+                    [class.open]="isPillOpen('goals', row.team_id, $index)"
+                    [attr.aria-expanded]="isPillOpen('goals', row.team_id, $index)"
+                    (click)="toggleMetricPill('goals', row.team_id, $index, $event)"
+                  >
+                    <span>{{ fixtureChipLabel(fx) }}</span>
+                    <span class="fx-extra">
+                      {{ pct(fx.value) | number: '1.0-0' }}%
+                      @if (fx.expected_goals != null) {
+                        [{{ fx.expected_goals | number: '1.1-2' }}]
+                      }
+                    </span>
+                  </button>
+                }
+              </div>
+              @if (openMetricFixture('goals', row); as fx) {
+                <p class="fx-note">
+                  @if (fx.gameweek_number) {
+                    GW{{ fx.gameweek_number }} ·
+                  }
+                  {{ pct(fx.value) | number: '1.0-0' }}% to score
+                  @if (fx.expected_goals != null) {
+                    · {{ fx.expected_goals | number: '1.1-2' }} xG
+                  }
+                  · {{ fx.is_home ? 'Home' : 'Away' }}
+                </p>
+              }
+            </div>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="metricColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: metricColumns"></tr>
+      </table>
+    </div>
+  }
+</section>

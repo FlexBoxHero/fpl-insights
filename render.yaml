@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: fpl-insights
+    runtime: docker
+    plan: free
+    dockerfilePath: infra/Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: VISION_API_KEY
+        sync: false
+      - key: VISION_API_BASE
+        value: https://generativelanguage.googleapis.com/v1beta/openai
+      - key: VISION_MODEL
+        value: gemini-3.5-flash-lite

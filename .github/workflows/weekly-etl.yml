@@ -1,0 +1,48 @@
+name: Weekly FPL ETL and inference
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: weekly skips historical backfill; full is the first Neon seed
+        type: choice
+        default: weekly
+        options:
+          - weekly
+          - full
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Require DATABASE_URL
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "Add a repository secret named DATABASE_URL."
+            echo "Use the Neon *direct* (non-pooler) connection string."
+            echo "Prefix the scheme as postgresql+psycopg:// and keep sslmode=require."
+            exit 1
+          fi
+      - name: Install dependencies
+        run: |
+          pip install -e packages/fpl_shared -e services/etl -e services/ml -e services/api
+      - name: Migrate
+        working-directory: packages/fpl_shared
+        run: alembic upgrade head
+      - name: Full seed
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'full'
+        run: |
+          python scripts/run_etl.py
+          python scripts/run_inference.py
+      - name: Weekly pipeline
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.mode != 'full'
+        run: python scripts/weekly_pipeline.py

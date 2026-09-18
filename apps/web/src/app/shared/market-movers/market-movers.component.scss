@@ -1,0 +1,27 @@
+.group-title {
+  margin: 0.25rem 0 0.75rem;
+  font-size: 1.05rem;
+  color: var(--fpl-muted);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+
+  > .section-card {
+    min-width: 0;
+    overflow: hidden;
+    margin-bottom: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+}

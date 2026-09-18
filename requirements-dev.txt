@@ -1,0 +1,4 @@
+-e packages/fpl_shared
+-e services/etl
+-e services/ml
+-e services/api

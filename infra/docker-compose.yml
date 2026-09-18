@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fpl
+      POSTGRES_PASSWORD: fpl
+      POSTGRES_DB: fpl_insights
+    ports:
+      - "5432:5432"
+    volumes:
+      - fpl_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fpl -d fpl_insights"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://fpl:fpl@db:5432/fpl_insights
+      CORS_ORIGINS: http://localhost:4200
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  fpl_pg_data:

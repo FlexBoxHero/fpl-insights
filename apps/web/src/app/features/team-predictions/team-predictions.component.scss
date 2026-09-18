@@ -1,0 +1,126 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.fixture-cell {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.fixture-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.fx-pill {
+  appearance: none;
+  border: 0;
+  font: inherit;
+  cursor: default;
+  flex: 0 0 auto;
+  gap: 0.28rem;
+  white-space: nowrap;
+}
+
+.fx-extra {
+  font-weight: 800;
+}
+
+.fx-note {
+  display: none;
+}
+
+.fdr-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.model-tag {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  background: rgba(124, 92, 255, 0.2);
+  color: #c4b5fd;
+}
+
+.slider-block {
+  min-width: 220px;
+  flex: 1;
+
+  label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--fpl-muted);
+    margin-bottom: 0.25rem;
+  }
+}
+
+@media (max-width: 840px) {
+  .slider-block {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .fixture-strip {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    max-width: 100%;
+    padding-bottom: 0.15rem;
+  }
+
+  .fx-pill {
+    cursor: pointer;
+
+    &.open {
+      box-shadow: 0 0 0 2px #fff;
+    }
+  }
+
+  .fixture-strip > .diff-pill {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .fx-extra {
+    display: none;
+  }
+
+  .fx-note {
+    display: block;
+    margin: 0.4rem 0 0;
+    color: var(--fpl-muted);
+    font-size: 0.78rem;
+    line-height: 1.35;
+    white-space: normal;
+  }
+
+  :host ::ng-deep {
+    .pred-table {
+      table-layout: fixed;
+    }
+
+    .mat-column-team {
+      width: 5.6rem;
+    }
+
+    .mat-column-overall {
+      width: 4.2rem;
+      white-space: normal !important;
+    }
+
+    .mat-column-fixtures {
+      width: auto;
+      white-space: normal !important;
+    }
+  }
+}

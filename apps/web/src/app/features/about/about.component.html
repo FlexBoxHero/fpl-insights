@@ -1,0 +1,62 @@
+<h1>Methodology</h1>
+<p>
+  FPL Insights is an experimental analytics tool. It is not affiliated with the Premier League or
+  Fantasy Premier League.
+</p>
+
+<h2>Data</h2>
+<ul>
+  <li>Official FPL API (current season)</li>
+  <li>
+    <a href="https://github.com/vaastav/Fantasy-Premier-League" target="_blank" rel="noopener"
+      >vaastav/Fantasy-Premier-League</a
+    >
+    (historical GW data)
+  </li>
+  <li>
+    <a href="https://www.football-data.co.uk/" target="_blank" rel="noopener">football-data.co.uk</a>
+    (match results)
+  </li>
+</ul>
+
+<h2>Models (Phase 1)</h2>
+<ul>
+  <li>Teams: Poisson goal rates from rolling results + logistic clean-sheet calibration</li>
+  <li>Players: LightGBM on rolling FPL stats and fixture difficulty</li>
+</ul>
+
+<h2>Chip strategy (Phase 2)</h2>
+<ul>
+  <li>
+    Two of each chip per season: one in GW1–19 and one in GW20–38 (Wildcard, Bench Boost, Triple
+    Captain, Free Hit). Only one chip can be active in a gameweek.
+  </li>
+  <li>
+    Timing uses remaining fixtures (blanks/doubles and difficulty swings) plus projected player
+    points. Triple Captain also names the player to captain that week.
+  </li>
+  <li>Advice is league-wide — it does not use your actual squad.</li>
+</ul>
+
+<h2>My Team (Phase 3)</h2>
+<ul>
+  <li>
+    Load your 15 via FPL team ID, the in-app picker, or a squad screenshot (screenshot needs a
+    vision API key). Analysis uses <em>your</em> squad.
+  </li>
+  <li>
+    Rating compares your XI and captain to a template best XI from the same projections, then flags
+    weak starters, hard fixtures, and one-transfer upgrades.
+  </li>
+</ul>
+
+@if (meta(); as m) {
+  <h2>Runtime</h2>
+  <p>Model version: <strong>{{ m.model_version }}</strong></p>
+  @if (m.last_etl_at) {
+    <p>
+      Last pipeline run: {{ m.last_etl_job }} ({{ m.last_etl_status }}) at
+      {{ m.last_etl_at | date: 'medium' }}
+    </p>
+  }
+}

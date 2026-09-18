@@ -1,0 +1,468 @@
+<div class="page-header">
+  <h1>My Team</h1>
+  <p class="subtitle">
+    Load your 15, then we rate the XI, flag weak spots, pick a captain, and suggest a one-transfer
+    upgrade. Uses the same player projections as the rest of the app.
+  </p>
+</div>
+
+<mat-tab-group
+  animationDuration="0"
+  class="ingest-tabs"
+  [selectedIndex]="selectedTab()"
+  (selectedIndexChange)="setTab($event)"
+>
+  <mat-tab label="Build squad">
+    <div class="tab-body">
+      <p class="section-desc">
+        Tap empty shirts on the pitch to add players. 2 GK · 5 DEF · 5 MID · 3 FWD · max 3 per club ·
+        £100.0m. {{ countFor('GK') }}/2 GK · {{ countFor('DEF') }}/5 DEF · {{ countFor('MID') }}/5 MID
+        · {{ countFor('FWD') }}/3 FWD · £{{ budgetUsed() | number: '1.1-1' }}m used ·
+        £{{ budgetLeft() | number: '1.1-1' }}m left
+      </p>
+    </div>
+  </mat-tab>
+
+  <mat-tab label="FPL team ID">
+    <div class="tab-body">
+      <p class="section-desc">
+        From fantasy.premierleague.com, open your team and copy the number in
+        <code>/entry/1234567/</code>. The team must be public.
+      </p>
+      <div class="id-row">
+        <mat-form-field appearance="outline" class="grow">
+          <mat-label>Team ID</mat-label>
+          <input matInput [value]="entryId()" (input)="entryId.set($any($event.target).value)" />
+        </mat-form-field>
+        <button mat-flat-button color="primary" type="button" [disabled]="loading()" (click)="loadFromEntry()">
+          Load team
+        </button>
+      </div>
+    </div>
+  </mat-tab>
+
+  <mat-tab label="Screenshot">
+    <div class="tab-body">
+      @if (!visionEnabled()) {
+        <p class="section-desc">
+          Screenshot parsing needs <code>VISION_API_KEY</code> on the API. Use Build squad or FPL
+          team ID in the meantime.
+        </p>
+      } @else {
+        <p class="section-desc">
+          Upload a pitch screenshot. We map names and analyse immediately — tap any shirt on the
+          formation to fix a wrong player.
+        </p>
+        <input type="file" accept="image/*" (change)="onScreenshot($event)" />
+        @if (parsing()) {
+          <mat-spinner diameter="32" />
+        }
+        @if (screenshotNotes()) {
+          <p class="muted">{{ screenshotNotes() }}</p>
+        }
+        @if (unmatchedNames().length) {
+          <p class="muted">Couldn’t match these — tap a shirt on the pitch to place them:</p>
+          <ul class="unmatched-chips">
+            @for (name of unmatchedNames(); track $index) {
+              <li>{{ name }}</li>
+            }
+          </ul>
+        }
+      }
+    </div>
+  </mat-tab>
+</mat-tab-group>
+
+@if (showPitch()) {
+<section class="section-card compact-section pitch-section">
+  <div class="pitch-toolbar">
+    <div>
+      <h2>Starting XI · {{ formation() }}</h2>
+      <div class="formation-row" role="group" aria-label="Formation">
+        @for (code of formationOptions; track code) {
+          <button
+            type="button"
+            class="form-chip"
+            [class.active]="formation() === code"
+            (click)="setFormation(code)"
+          >
+            {{ code }}
+          </button>
+        }
+      </div>
+    </div>
+    <div class="pitch-actions">
+      <div class="pitch-meta">
+        <mat-form-field appearance="outline">
+          <mat-label>Bank £m</mat-label>
+          <input matInput type="number" step="0.1" [value]="bank()" (input)="bank.set(+$any($event.target).value || 0)" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Free transfers</mat-label>
+          <input
+            matInput
+            type="number"
+            min="0"
+            [value]="freeTransfers()"
+            (input)="freeTransfers.set(+$any($event.target).value || 0)"
+          />
+        </mat-form-field>
+      </div>
+      <button mat-flat-button color="primary" type="button" [disabled]="loading()" (click)="analyzePicked()">
+        Analyse squad
+      </button>
+      <button mat-button type="button" [disabled]="!picked().length" (click)="clearPitch()">
+        Clear pitch
+      </button>
+    </div>
+  </div>
+
+  @if (loadingPool()) {
+    <mat-spinner diameter="32" />
+  }
+
+  <div class="pitch" aria-label="Squad pitch">
+    @for (row of pitchRows(); track row.pos) {
+      <div class="pitch-line" [attr.data-count]="row.slots.length">
+        @for (slot of row.slots; track slot.key) {
+          <button
+            type="button"
+            class="shirt"
+            [class.is-empty]="!slot.player"
+            [class.is-captain]="isPitchCaptain(slot.player)"
+            [class.is-vice]="isPitchVice(slot.player)"
+            [attr.aria-label]="slot.player ? 'Change ' + slot.player.web_name : 'Add ' + slot.position"
+            (click)="openSlot(slot)"
+          >
+            <div class="kit">
+              @if (slot.player; as p) {
+                <app-club-mark
+                  [team]="p.team"
+                  [fullName]="p.team_name"
+                  [teamCode]="p.team_code"
+                  [size]="34"
+                  [showName]="false"
+                />
+                @if (isPitchCaptain(p)) {
+                  <span class="armband">C</span>
+                } @else if (isPitchVice(p)) {
+                  <span class="armband vice">V</span>
+                }
+              } @else {
+                <span class="plus">+</span>
+              }
+            </div>
+            <div class="plate">
+              <span class="nm">{{ slot.player?.web_name || slot.position }}</span>
+              <span class="pts">
+                @if (slot.player) {
+                  {{ slot.player.expected_points | number: '1.1-1' }}
+                } @else {
+                  Add
+                }
+              </span>
+            </div>
+          </button>
+        }
+      </div>
+    }
+  </div>
+  <h3>Bench</h3>
+  <div class="bench-strip">
+    @for (slot of benchSlots(); track slot.key) {
+      <button
+        type="button"
+        class="shirt bench-shirt"
+        [class.is-empty]="!slot.player"
+        [attr.aria-label]="slot.player ? 'Change ' + slot.player.web_name : 'Add bench ' + slot.position"
+        (click)="openSlot(slot)"
+      >
+        <div class="kit">
+          @if (slot.player; as p) {
+            <app-club-mark
+              [team]="p.team"
+              [fullName]="p.team_name"
+              [teamCode]="p.team_code"
+              [size]="28"
+              [showName]="false"
+            />
+          } @else {
+            <span class="plus">+</span>
+          }
+        </div>
+        <div class="plate">
+          <span class="nm">{{ slot.player?.web_name || slot.position }}</span>
+          <span class="pts">
+            @if (slot.player) {
+              {{ slot.player.expected_points | number: '1.1-1' }}
+            } @else {
+              Add
+            }
+          </span>
+        </div>
+      </button>
+    }
+  </div>
+  <p class="pitch-hint">
+    Tap a starter to set captain or vice. Tap the bench to bring someone on or change that player.
+  </p>
+</section>
+}
+
+@if (error()) {
+  <p class="error">{{ error() }}</p>
+}
+@if (loading()) {
+  <mat-spinner diameter="36" />
+}
+
+@if (showPitch()) {
+  @if (analysis(); as a) {
+  <div class="analysis-stack">
+  <section class="section-card result-hero">
+    <div class="score" [class]="ratingClass(a.rating_label)">
+      <strong>{{ a.rating }}</strong>
+      <span>{{ a.rating_label }}</span>
+    </div>
+    <div>
+      <h2>
+        GW{{ a.gameweek }} · {{ a.formation }}
+        @if (a.entry?.name) {
+          <span class="range">{{ a.entry?.name }}</span>
+        }
+      </h2>
+      <p class="section-desc">{{ a.rating_reason }}</p>
+      <p class="muted">
+        XI {{ a.xi_xpts | number: '1.1-1' }} xPts ({{ a.xi_xpts_with_captain | number: '1.1-1' }} with
+        captain) · template {{ a.template_xi_xpts | number: '1.1-1' }} · bench
+        {{ a.bench_xpts | number: '1.1-1' }} · value £{{ a.squad_value | number: '1.1-1' }}m · bank
+        £{{ a.bank | number: '1.1-1' }}m · {{ a.free_transfers }} FT
+      </p>
+    </div>
+  </section>
+
+  <section class="section-card compact-section analysis-card">
+    <h2>Captain</h2>
+    @if (a.captain; as cap) {
+      <p class="player-line">
+        <strong>{{ cap.web_name }}</strong>
+        ({{ cap.position }}, {{ cap.team }}) vs {{ cap.opponents }} ·
+        {{ cap.captain_expected_points | number: '1.1-1' }} as C
+      </p>
+      @if (cap.note) {
+        <p class="section-desc">{{ cap.note }}</p>
+      }
+    }
+    @if (a.global_captain && a.global_captain.player_id !== a.captain?.player_id) {
+      <p class="muted">
+        League-wide best: {{ a.global_captain.web_name }}
+        ({{ a.global_captain.expected_points | number: '1.1-1' }} xPts)
+      </p>
+    }
+  </section>
+
+  <section class="section-card compact-section analysis-card">
+    <h2>Weak points</h2>
+    @if (a.issues.length === 0) {
+      <p class="empty">No major flags this week.</p>
+    } @else {
+      <ul class="issue-list">
+        @for (issue of a.issues; track issue.title) {
+          <li>
+            <span [class]="severityClass(issue.severity)">{{ issue.severity }}</span>
+            <div>
+              <strong>{{ issue.title }}</strong>
+              <p>{{ issue.detail }}</p>
+            </div>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+
+  <section class="section-card compact-section analysis-card">
+    <h2>Suggested transfers</h2>
+    @if (a.transfers.length === 0) {
+      <p class="empty">No one-transfer upgrade found that fits budget and the 3-per-club rule.</p>
+    } @else {
+      <div class="transfer-grid">
+        @for (t of a.transfers; track t.out.player_id + '-' + t.in.player_id) {
+          <article class="transfer-card">
+            <header>
+              <span class="out">{{ t.out.web_name }}</span>
+              →
+              <span class="in">{{ t.in.web_name }}</span>
+              <span class="rec-gw">+{{ t.gain | number: '1.1-1' }} XI xPts</span>
+            </header>
+            <p>{{ t.reason }}</p>
+            <p class="muted">Bank after: £{{ t.remaining_bank | number: '1.1-1' }}m</p>
+          </article>
+        }
+      </div>
+    }
+  </section>
+  </div>
+  }
+}
+
+@if (editorOpen()) {
+  @if (editorSlot(); as slot) {
+    <div class="player-editor-backdrop" (click)="closeEditor()">
+      <div
+        class="player-editor"
+        role="dialog"
+        aria-modal="true"
+        [attr.aria-label]="slot.player ? 'Replace ' + slot.player.web_name : 'Add ' + slot.position"
+        (click)="$event.stopPropagation()"
+      >
+        <header>
+          <div>
+            <h3>
+              @if (slot.player; as p) {
+                Replace {{ p.web_name }}
+              } @else {
+                Add {{ slot.position }}
+              }
+            </h3>
+            <p class="muted">
+              @if (!slot.starter && slot.player) {
+                Bring them on for a starter, or search to change this {{ slot.position }}.
+              } @else if (slot.player) {
+                Set captain or vice, or search to change this {{ slot.position }}.
+              } @else {
+                Search {{ slot.position }}s. Filter by price if you want a cheaper option.
+              }
+            </p>
+          </div>
+          <div class="editor-header-actions">
+            @if (slot.player) {
+              <button mat-button type="button" (click)="clearSlot()">Clear</button>
+            }
+            <button mat-button type="button" (click)="closeEditor()">Close</button>
+          </div>
+        </header>
+        @if (slot.starter && slot.player; as p) {
+          <div class="armband-row">
+            <button
+              type="button"
+              class="armband-btn"
+              [class.active]="isPitchCaptain(p)"
+              (click)="makeCaptain()"
+            >
+              C · Captain
+            </button>
+            <button
+              type="button"
+              class="armband-btn vice"
+              [class.active]="isPitchVice(p)"
+              (click)="makeVice()"
+            >
+              V · Vice
+            </button>
+          </div>
+        }
+        @if (subTargets().length) {
+          <h4 class="sub-heading">Bring on for</h4>
+          <div class="editor-hits sub-hits">
+            @for (target of subTargets(); track target.key) {
+              @if (target.player; as out) {
+                <button type="button" class="hit" (click)="subOn(target)">
+                  <app-club-mark
+                    [team]="out.team"
+                    [fullName]="out.team_name"
+                    [teamCode]="out.team_code"
+                    [size]="28"
+                    [showName]="false"
+                  />
+                  <span>
+                    <strong>{{ out.web_name }}</strong>
+                    <small>
+                      {{ target.position }} · {{ out.team }} ·
+                      {{ out.expected_points | number: '1.1-1' }} xPts
+                    </small>
+                  </span>
+                </button>
+              }
+            }
+          </div>
+        }
+        <mat-form-field appearance="outline" class="grow">
+          <mat-label>Search {{ slot.position }}</mat-label>
+          <input
+            matInput
+            [value]="editorQuery()"
+            (input)="editorQuery.set($any($event.target).value)"
+            placeholder="Name or club"
+          />
+        </mat-form-field>
+        <div class="editor-filters">
+          <div class="price-caps" role="group" aria-label="Max price">
+            <button
+              type="button"
+              class="filter-chip"
+              [class.active]="editorMaxPrice() === null && !editorInBudget()"
+              (click)="editorMaxPrice.set(null); editorInBudget.set(false)"
+            >
+              Any £
+            </button>
+            @for (cap of priceCaps; track cap) {
+              <button
+                type="button"
+                class="filter-chip"
+                [class.active]="editorMaxPrice() === cap"
+                (click)="setEditorMaxPrice(cap)"
+              >
+                ≤ £{{ cap | number: '1.1-1' }}m
+              </button>
+            }
+            <button
+              type="button"
+              class="filter-chip"
+              [class.active]="editorInBudget()"
+              (click)="editorInBudget.set(!editorInBudget())"
+            >
+              In budget
+            </button>
+          </div>
+          <div class="price-caps" role="group" aria-label="Sort players">
+            @for (opt of sortOptions; track opt.id) {
+              <button
+                type="button"
+                class="filter-chip"
+                [class.active]="editorSort() === opt.id"
+                (click)="editorSort.set(opt.id)"
+              >
+                {{ opt.label }}
+              </button>
+            }
+          </div>
+        </div>
+        <div class="editor-hits">
+          @for (p of editorHits(); track p.player_id) {
+            <button type="button" class="hit" [disabled]="!!canPlace(p, slot)" (click)="placeOnSlot(p)">
+              <app-club-mark
+                [team]="p.team"
+                [fullName]="p.team_name"
+                [teamCode]="p.team_code"
+                [size]="28"
+                [showName]="false"
+              />
+              <span>
+                <strong>{{ p.web_name }}</strong>
+                <small>
+                  {{ p.team }} · £{{ p.price | number: '1.1-1' }}m ·
+                  {{ p.expected_points | number: '1.1-1' }} xPts
+                  @if (canPlace(p, slot); as reason) {
+                    · {{ reason }}
+                  }
+                </small>
+              </span>
+            </button>
+          } @empty {
+            <p class="muted">No matching players.</p>
+          }
+        </div>
+      </div>
+    </div>
+  }
+}

@@ -1,0 +1,141 @@
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.filter {
+  width: 10rem;
+  margin-bottom: 0;
+}
+
+.clear-compare {
+  border-color: var(--fpl-border) !important;
+  color: var(--fpl-text) !important;
+}
+
+.compare-panel {
+  margin-bottom: 1.25rem;
+  padding: 1rem;
+  border-radius: 12px;
+  background: rgba(0, 255, 135, 0.06);
+  border: 1px solid rgba(0, 255, 135, 0.2);
+
+  h3 {
+    margin: 0 0 0.75rem;
+    font-size: 0.95rem;
+    color: var(--fpl-accent);
+  }
+}
+
+.compare-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.compare-card {
+  background: var(--fpl-surface-2);
+  border: 1px solid var(--fpl-border);
+  border-radius: 10px;
+  padding: 0.75rem 0.85rem;
+
+  .compare-head {
+    margin-bottom: 0.5rem;
+
+    strong {
+      display: block;
+    }
+
+    .meta {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.8rem;
+      color: var(--fpl-muted);
+    }
+  }
+
+  dl {
+    margin: 0;
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  dl > div {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    padding: 0.2rem 0.35rem;
+    border-radius: 6px;
+
+    &.best {
+      background: rgba(0, 255, 135, 0.12);
+      outline: 1px solid rgba(0, 255, 135, 0.25);
+    }
+  }
+
+  dt {
+    color: var(--fpl-muted);
+  }
+
+  dd {
+    margin: 0;
+    font-weight: 600;
+  }
+}
+
+.table-wrap {
+  overflow-x: auto;
+  border-radius: 10px;
+  border: 1px solid var(--fpl-border);
+}
+
+.points-paginator {
+  margin-top: 0.5rem;
+  border-radius: 0 0 10px 10px;
+  border: 1px solid var(--fpl-border);
+  border-top: none;
+}
+
+.positive {
+  color: var(--fpl-accent);
+  font-weight: 600;
+}
+
+.negative {
+  color: var(--fpl-danger);
+  font-weight: 600;
+}
+
+.compact td,
+.compact th {
+  padding-top: 0.3rem !important;
+  padding-bottom: 0.3rem !important;
+  font-size: 0.82rem;
+}
+
+.mini-table {
+  max-height: 520px;
+  overflow: auto;
+}
+
+@media (max-width: 840px) {
+  .filter {
+    width: 100%;
+  }
+
+  .toolbar {
+    gap: 0.65rem;
+  }
+
+  .compare-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pred-table .mat-column-team {
+    width: 4.2rem;
+  }
+}
