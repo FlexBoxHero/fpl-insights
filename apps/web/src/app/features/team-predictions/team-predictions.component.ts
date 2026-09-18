@@ -1,5 +1,5 @@
 import { DecimalPipe, NgClass } from '@angular/common';
-import { Component, computed, effect, HostListener, inject, signal } from '@angular/core';
+import { Component, computed, DestroyRef, effect, HostListener, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -25,6 +25,15 @@ type MetricKind = 'cs' | 'goals';
 
 const MIN_FIXTURE_WINDOW = 3;
 const MAX_FIXTURE_WINDOW = 8;
+const FDR_DESKTOP_DEFAULT = 5;
+const FDR_MOBILE_DEFAULT = 3;
+const MOBILE_QUERY = '(max-width: 840px)';
+
+function defaultFdrCount(): number {
+  return typeof window !== 'undefined' && window.matchMedia(MOBILE_QUERY).matches
+    ? FDR_MOBILE_DEFAULT
+    : FDR_DESKTOP_DEFAULT;
+}
 
 @Component({
   selector: 'app-team-predictions',
@@ -46,17 +55,18 @@ const MAX_FIXTURE_WINDOW = 8;
 export class TeamPredictionsComponent {
   private readonly api = inject(ApiService);
   private readonly gwStore = inject(GameweekStore);
+  private readonly destroyRef = inject(DestroyRef);
+  private fdrCountTouched = false;
 
   readonly minFixtureWindow = MIN_FIXTURE_WINDOW;
   readonly maxFixtureWindow = MAX_FIXTURE_WINDOW;
 
-  readonly fdrFixtureCount = signal(3);
+  readonly fdrFixtureCount = signal(defaultFdrCount());
   readonly loadingFdr = signal(false);
   readonly loadingCs = signal(false);
   readonly loadingGoals = signal(false);
 
   readonly fixtureRuns = signal<TeamFixtureRun[]>([]);
-  readonly fdrModelTag = signal<string | null>(null);
   readonly cleanSheets = signal<TeamMetricRun[]>([]);
   readonly goalsOutlook = signal<TeamMetricRun[]>([]);
 
@@ -88,6 +98,15 @@ export class TeamPredictionsComponent {
   readonly opportunityClass = opportunityPillClass;
 
   constructor() {
+    const mq = window.matchMedia(MOBILE_QUERY);
+    const onMq = (e: MediaQueryListEvent) => {
+      if (!this.fdrCountTouched) {
+        this.fdrFixtureCount.set(e.matches ? FDR_MOBILE_DEFAULT : FDR_DESKTOP_DEFAULT);
+      }
+    };
+    mq.addEventListener('change', onMq);
+    this.destroyRef.onDestroy(() => mq.removeEventListener('change', onMq));
+
     effect(() => {
       const gw = this.gwStore.selectedGameweek();
       const count = this.fdrFixtureCount();
@@ -107,6 +126,7 @@ export class TeamPredictionsComponent {
   }
 
   onFdrFixtureCountChange(value: number): void {
+    this.fdrCountTouched = true;
     this.fdrFixtureCount.set(value);
   }
 
@@ -161,12 +181,10 @@ export class TeamPredictionsComponent {
     this.api.getTeamFixtureRuns(gw, count).subscribe({
       next: (data) => {
         this.fixtureRuns.set(data);
-        this.fdrModelTag.set(data[0]?.difficulty_model ?? null);
         this.loadingFdr.set(false);
       },
       error: () => {
         this.fixtureRuns.set([]);
-        this.fdrModelTag.set(null);
         this.loadingFdr.set(false);
       },
     });

@@ -3,6 +3,54 @@
   min-width: 0;
 }
 
+.section-controls {
+  justify-content: flex-start;
+}
+
+.slider-block {
+  min-width: 220px;
+  flex: 0 1 22rem;
+
+  label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--fpl-muted);
+    margin-bottom: 0.25rem;
+  }
+}
+
+.team-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.rank {
+  flex: 0 0 1.4rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--fpl-muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.team-code {
+  display: none;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.team-full {
+  color: var(--fpl-text);
+  font-size: 0.92rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
 .fixture-cell {
   min-width: 0;
   max-width: 100%;
@@ -10,9 +58,22 @@
 
 .fixture-strip {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 0.45rem;
+  width: 100%;
+}
+
+.fx-opp,
+.fx-gw {
+  display: block;
+  line-height: 1.2;
+}
+
+.fx-gw {
+  font-size: 0.68rem;
+  font-weight: 600;
+  opacity: 0.8;
 }
 
 .fx-pill {
@@ -20,8 +81,9 @@
   border: 0;
   font: inherit;
   cursor: default;
-  flex: 0 0 auto;
-  gap: 0.28rem;
+  flex: 1 1 0;
+  min-width: 0;
+  gap: 0.2rem;
   white-space: nowrap;
 }
 
@@ -40,25 +102,61 @@
   margin-bottom: 1rem;
 }
 
-.model-tag {
-  display: inline-block;
-  margin-left: 0.5rem;
-  padding: 0.1rem 0.45rem;
-  border-radius: 6px;
-  font-size: 0.72rem;
-  background: rgba(124, 92, 255, 0.2);
-  color: #c4b5fd;
+.outlook-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+
+  .section-card {
+    margin-bottom: 0;
+  }
 }
 
-.slider-block {
-  min-width: 220px;
-  flex: 1;
+:host ::ng-deep {
+  .pred-table {
+    table-layout: fixed;
+  }
 
-  label {
-    display: block;
-    font-size: 0.85rem;
-    color: var(--fpl-muted);
-    margin-bottom: 0.25rem;
+  .mat-column-team {
+    width: 16.5rem;
+  }
+
+  .mat-column-overall {
+    width: 7.5rem;
+  }
+
+  .mat-column-fixtures {
+    width: auto;
+  }
+
+  .mat-mdc-cell,
+  .mat-mdc-header-cell {
+    vertical-align: middle;
+  }
+
+  .fixture-strip > .diff-pill,
+  .fx-pill {
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    min-height: 3.35rem;
+    padding: 0.4rem 0.5rem;
+    font-size: 0.8rem;
+    border-radius: 10px;
+  }
+}
+
+@media (min-width: 1400px) {
+  .outlook-grid {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+
+  :host ::ng-deep .mat-column-team {
+    width: 14.5rem;
   }
 }
 
@@ -66,6 +164,20 @@
   .slider-block {
     min-width: 0;
     width: 100%;
+    flex: 1 1 auto;
+  }
+
+  .rank {
+    display: none;
+  }
+
+  .team-full,
+  .fx-gw {
+    display: none;
+  }
+
+  .team-code {
+    display: inline;
   }
 
   .fixture-strip {
@@ -80,15 +192,11 @@
 
   .fx-pill {
     cursor: pointer;
+    flex: 0 0 auto;
 
     &.open {
       box-shadow: 0 0 0 2px #fff;
     }
-  }
-
-  .fixture-strip > .diff-pill {
-    flex: 0 0 auto;
-    white-space: nowrap;
   }
 
   .fx-extra {
@@ -105,10 +213,6 @@
   }
 
   :host ::ng-deep {
-    .pred-table {
-      table-layout: fixed;
-    }
-
     .mat-column-team {
       width: 5.6rem;
     }
@@ -121,6 +225,16 @@
     .mat-column-fixtures {
       width: auto;
       white-space: normal !important;
+    }
+
+    .fixture-strip > .diff-pill,
+    .fx-pill {
+      flex: 0 0 auto;
+      flex-direction: row;
+      min-height: 0;
+      padding: 0.22rem 0.45rem;
+      font-size: 0.7rem;
+      white-space: nowrap;
     }
   }
 }

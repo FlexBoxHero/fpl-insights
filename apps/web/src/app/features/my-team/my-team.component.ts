@@ -1,6 +1,16 @@
 import { DecimalPipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, effect, HostListener, inject, signal } from '@angular/core';
+import {
+  AfterViewInit,
+  Component,
+  computed,
+  effect,
+  ElementRef,
+  HostListener,
+  inject,
+  signal,
+  ViewChild,
+} from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -45,8 +55,9 @@ interface StoredPitch {
   slotPlayers: Record<string, number | null>;
   captainId: number | null;
   viceId: number | null;
-  bank: number;
+  bank?: number;
   freeTransfers: number;
+  budgetCap?: number;
 }
 
 function takePlayer(queue: PlayerPrediction[]): PlayerPrediction | null {
@@ -121,9 +132,12 @@ function groupByPos(slots: SquadSlot[], startersFirst = true): Record<Pos, Playe
   templateUrl: './my-team.component.html',
   styleUrl: './my-team.component.scss',
 })
-export class MyTeamComponent {
+export class MyTeamComponent implements AfterViewInit {
   private readonly api = inject(ApiService);
   private readonly gwStore = inject(GameweekStore);
+  @ViewChild('pitchStage') private pitchStage?: ElementRef<HTMLElement>;
+  @ViewChild('pitchFoot') private pitchFoot?: ElementRef<HTMLElement>;
+  private lastPitchMaxH = '';
 
   readonly formationOptions = Object.keys(FORMATIONS);
   readonly pool = signal<PlayerPrediction[]>([]);
@@ -131,7 +145,7 @@ export class MyTeamComponent {
   readonly formation = signal(DEFAULT_FORMATION);
   readonly captainId = signal<number | null>(null);
   readonly viceId = signal<number | null>(null);
-  readonly bank = signal(0);
+  readonly budgetCap = signal(100);
   readonly freeTransfers = signal(1);
   readonly entryId = signal('');
   readonly loadingPool = signal(false);
@@ -175,8 +189,14 @@ export class MyTeamComponent {
       .map((s) => s.player)
       .filter((p): p is PlayerPrediction => !!p),
   );
-  readonly budgetUsed = computed(() => this.picked().reduce((sum, p) => sum + p.price, 0));
-  readonly budgetLeft = computed(() => 100 - this.budgetUsed());
+  readonly budgetUsed = computed(() => {
+    const used = this.picked().reduce((sum, p) => sum + p.price, 0);
+    return Math.round(used * 10) / 10;
+  });
+  /** Remaining / bank — always budget minus used. Squad cannot exceed the cap. */
+  readonly budgetLeft = computed(() => Math.round((this.budgetCap() - this.budgetUsed()) * 10) / 10);
+  readonly usedDisplay = computed(() => `£${this.budgetUsed().toFixed(1)}m`);
+  readonly remainingDisplay = computed(() => `£${this.budgetLeft().toFixed(1)}m`);
   readonly squadFull = computed(() => {
     const list = this.picked();
     return (
@@ -186,10 +206,13 @@ export class MyTeamComponent {
   });
   readonly pitchRows = computed(() => {
     const slots = this.slots().filter((s) => s.starter);
-    return POSITIONS.map((pos) => ({
-      pos,
-      slots: slots.filter((s) => s.position === pos),
-    })).filter((row) => row.slots.length);
+    return [...POSITIONS]
+      .reverse()
+      .map((pos) => ({
+        pos,
+        slots: slots.filter((s) => s.position === pos),
+      }))
+      .filter((row) => row.slots.length);
   });
   readonly benchSlots = computed(() => this.slots().filter((s) => !s.starter));
   readonly unmatchedNames = computed(() =>
@@ -215,7 +238,7 @@ export class MyTeamComponent {
     const inBudget = this.editorInBudget();
     const currentId = slot.player?.player_id ?? null;
     const currentPrice = slot.player?.price ?? 0;
-    const room = 100.05 - (this.budgetUsed() - currentPrice);
+    const room = this.budgetCap() + 0.05 - (this.budgetUsed() - currentPrice);
     const taken = new Set(this.picked().map((p) => p.player_id));
     if (currentId != null) {
       taken.delete(currentId);
@@ -260,6 +283,63 @@ export class MyTeamComponent {
         this.loadPool(gw);
       }
     });
+    effect(() => {
+      this.showPitch();
+      this.selectedTab();
+      requestAnimationFrame(() => this.fitPitchToViewport());
+    });
+  }
+
+  ngAfterViewInit(): void {
+    this.fitPitchToViewport();
+  }
+
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    this.fitPitchToViewport();
+  }
+
+  private fitPitchToViewport(): void {
+    const stage = this.pitchStage?.nativeElement;
+    if (!stage) {
+      return;
+    }
+    if (window.matchMedia('(max-width: 900px)').matches) {
+      this.lastPitchMaxH = '';
+      stage.style.removeProperty('--pitch-max-h');
+      return;
+    }
+    const foot = this.pitchFoot?.nativeElement;
+    const top = stage.getBoundingClientRect().top + window.scrollY;
+    const footH = foot?.offsetHeight ?? 0;
+    const section = stage.closest('.pitch-section');
+    const sectionPad = section ? parseFloat(getComputedStyle(section).paddingBottom) || 0 : 0;
+    const main = document.querySelector('main.content');
+    const padBottom = main ? parseFloat(getComputedStyle(main).paddingBottom) || 0 : 32;
+    const maxH = Math.max(
+      240,
+      Math.floor(window.innerHeight - top - footH - sectionPad - padBottom - 20),
+    );
+    const value = `${maxH}px`;
+    if (value !== this.lastPitchMaxH) {
+      this.lastPitchMaxH = value;
+      stage.style.setProperty('--pitch-max-h', value);
+    }
+    if (this.analysis()) {
+      return;
+    }
+    requestAnimationFrame(() => {
+      const overflow = document.documentElement.scrollHeight - window.innerHeight;
+      if (overflow <= 1 || overflow > 80) {
+        return;
+      }
+      const current = parseFloat(stage.style.getPropertyValue('--pitch-max-h')) || maxH;
+      const adj = `${Math.max(240, Math.floor(current - overflow))}px`;
+      if (adj !== this.lastPitchMaxH) {
+        this.lastPitchMaxH = adj;
+        stage.style.setProperty('--pitch-max-h', adj);
+      }
+    });
   }
 
   countFor(pos: string): number {
@@ -284,6 +364,7 @@ export class MyTeamComponent {
     }
     this.selectedTab.set(index);
     this.resetScreen();
+    requestAnimationFrame(() => this.fitPitchToViewport());
   }
 
   clearPitch(): void {
@@ -291,7 +372,6 @@ export class MyTeamComponent {
     this.slots.set(makeSlots(DEFAULT_FORMATION));
     this.captainId.set(null);
     this.viceId.set(null);
-    this.bank.set(0);
     this.freeTransfers.set(1);
     this.analysis.set(null);
     this.error.set(null);
@@ -441,8 +521,9 @@ export class MyTeamComponent {
       return `Already 3 from ${player.team}`;
     }
     const used = others.reduce((sum, p) => sum + p.price, 0);
-    if (used + player.price > 100.05) {
-      return 'Over the £100.0m budget';
+    const cap = this.budgetCap() + 0.05;
+    if (used + player.price > cap) {
+      return `Over the £${this.budgetCap().toFixed(1)}m budget`;
     }
     return null;
   }
@@ -513,6 +594,12 @@ export class MyTeamComponent {
     this.runAnalysis(this.picksPayload());
   }
 
+  setBudgetCap(raw: number): void {
+    const value = Number.isFinite(raw) ? Math.max(0, Math.round(raw * 10) / 10) : 100;
+    this.budgetCap.set(Math.max(this.budgetUsed(), value));
+    this.persist();
+  }
+
   loadFromEntry(): void {
     const id = Number(this.entryId());
     if (!Number.isInteger(id) || id <= 0) {
@@ -524,7 +611,7 @@ export class MyTeamComponent {
     this.entryLoaded.set(false);
     this.api.analyzeSquadFromEntry(id).subscribe({
       next: (data) => {
-        this.applyAnalysis(data);
+        this.applyAnalysis(data, true);
         this.entryLoaded.set(true);
         this.loading.set(false);
       },
@@ -625,6 +712,7 @@ export class MyTeamComponent {
       matches.filter((row) => row.player && !row.on_bench).map((row) => row.player!.player_id),
     );
     this.fillSlotsFromPlayers(mapped, starterIds);
+    this.ensureBudgetCoversUsed();
     this.persist();
     if (mapped.length === 0) {
       this.screenshotLoaded.set(false);
@@ -669,7 +757,7 @@ export class MyTeamComponent {
     return FORMATIONS[code] ? code : this.formation();
   }
 
-  private applyAnalysis(data: SquadAnalysis): void {
+  private applyAnalysis(data: SquadAnalysis, fromExternalLoad = false): void {
     this.analysis.set(data);
     const mapped: PlayerPrediction[] = data.players.map((p) => ({
       player_id: p.player_id,
@@ -696,15 +784,20 @@ export class MyTeamComponent {
     }
     this.captainId.set(cap);
     this.viceId.set(vice);
-    this.bank.set(data.bank);
     this.freeTransfers.set(data.free_transfers);
+    if (fromExternalLoad) {
+      const reported = Math.round(((data.squad_value ?? 0) + (data.bank ?? 0)) * 10) / 10;
+      this.budgetCap.set(Math.max(this.budgetUsed(), reported > 0 ? reported : this.budgetUsed()));
+    } else {
+      this.ensureBudgetCoversUsed();
+    }
     this.persist();
   }
 
   private runAnalysis(picks: SquadPickIn[], scrollToPitch = false): void {
     this.loading.set(true);
     this.error.set(null);
-    this.api.analyzeSquad(picks, this.bank(), this.freeTransfers()).subscribe({
+    this.api.analyzeSquad(picks, Math.max(0, this.budgetLeft()), this.freeTransfers()).subscribe({
       next: (data) => {
         this.applyAnalysis(data);
         this.loading.set(false);
@@ -757,8 +850,8 @@ export class MyTeamComponent {
       slotPlayers,
       captainId: this.captainId(),
       viceId: this.viceId(),
-      bank: this.bank(),
       freeTransfers: this.freeTransfers(),
+      budgetCap: this.budgetCap(),
     };
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -789,10 +882,18 @@ export class MyTeamComponent {
       );
       this.captainId.set(stored.captainId);
       this.viceId.set(stored.viceId);
-      this.bank.set(stored.bank ?? 0);
       this.freeTransfers.set(stored.freeTransfers ?? 1);
+      this.budgetCap.set(stored.budgetCap ?? 100);
+      this.ensureBudgetCoversUsed();
     } catch {
       /* ignore */
+    }
+  }
+
+  private ensureBudgetCoversUsed(): void {
+    const used = this.budgetUsed();
+    if (used > this.budgetCap()) {
+      this.budgetCap.set(used);
     }
   }
 
