@@ -18,6 +18,7 @@ import {
   TeamFixtureRun,
   TeamMetricRun,
   TeamPrediction,
+  PlayerWatch,
 } from './models';
 
 @Injectable({ providedIn: 'root' })
@@ -148,5 +149,9 @@ export class ApiService {
       image_base64: imageBase64,
       media_type: mediaType,
     });
+  }
+
+  getPlayerWatch(): Observable<PlayerWatch> {
+    return this.http.get<PlayerWatch>(`${this.base}/v1/insights/player-watch`);
   }
 }

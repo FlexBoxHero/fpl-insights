@@ -1,6 +1,6 @@
 <div class="page-header">
   <h1>Player predictions</h1>
-  <p class="subtitle">Expected points, captaincy, defensive contributions, and market movers for the selected gameweek.</p>
+  <p class="subtitle">Expected points, availability, captaincy, price changes, and market movers.</p>
 </div>
 
 <section class="section-card points-section">
@@ -159,6 +159,177 @@
   }
 </section>
 
+<section class="section-card compact-section">
+  <h2 matTooltip="{{ tooltips.captained }}">Most captained</h2>
+    <p class="section-desc">
+      @if (watch()?.gameweek_number) {
+        Top 5 for GW{{ watch()!.gameweek_number }} — official captain/vice, then most owned.
+      } @else {
+        Top 5 — official captain/vice, then most owned.
+      }
+    </p>
+    @if (loadingWatch() && !watch()) {
+      <mat-spinner diameter="28" />
+    } @else if (!watch() || watch()!.most_captained.length === 0) {
+      <p class="empty">No captaincy data yet.</p>
+    } @else {
+      <div class="table-wrap mini-table">
+        <table mat-table [dataSource]="watch()!.most_captained" class="pred-table data-table compact watch-table">
+          <ng-container matColumnDef="rank">
+            <th mat-header-cell *matHeaderCellDef>#</th>
+            <td mat-cell *matCellDef="let row; let i = index">{{ i + 1 }}</td>
+          </ng-container>
+          <ng-container matColumnDef="player">
+            <th mat-header-cell *matHeaderCellDef>Player</th>
+            <td mat-cell *matCellDef="let row" [matTooltip]="row.full_name">
+              <div class="player-cell">
+                <app-club-mark
+                  [team]="row.team"
+                  [fullName]="row.team_name"
+                  [teamCode]="row.team_code"
+                  [size]="18"
+                  [showName]="false"
+                />
+                <span>{{ row.web_name }}</span>
+              </div>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="badge">
+            <th mat-header-cell *matHeaderCellDef>Note</th>
+            <td mat-cell *matCellDef="let row">{{ row.badge }}</td>
+          </ng-container>
+          <ng-container matColumnDef="owned">
+            <th mat-header-cell *matHeaderCellDef>Own</th>
+            <td mat-cell *matCellDef="let row">{{ row.ownership_pct | number: '1.0-0' }}%</td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="captainedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: captainedColumns"></tr>
+        </table>
+      </div>
+    }
+  </section>
+
+<section class="section-card">
+  <h2 matTooltip="{{ tooltips.price }}">Price change predictor</h2>
+  <p class="section-desc">
+    Official FPL progress toward a midnight UK price change. Over 100% (or under −100%) means a
+    rise or drop is expected unless transfers swing late.
+    @if (watch()?.price_calibrating) {
+      Predicted % is still calibrating for some players.
+    }
+  </p>
+  @if (loadingWatch() && !watch()) {
+    <mat-spinner diameter="36" />
+  } @else if (!watch() || (watch()!.price_rises.length === 0 && watch()!.price_falls.length === 0)) {
+    <p class="empty">No price-change data yet.</p>
+  } @else {
+    <div class="insights-row price-row">
+      <div class="price-pane">
+        <h3 class="price-heading rise">Likely to rise</h3>
+        <div class="table-wrap mini-table price-wrap">
+          <table mat-table [dataSource]="watch()!.price_rises" class="pred-table data-table compact price-table">
+            <ng-container matColumnDef="player">
+              <th mat-header-cell *matHeaderCellDef>Player</th>
+              <td mat-cell *matCellDef="let row" [matTooltip]="row.full_name">
+                <div class="player-cell">
+                  <app-club-mark
+                  [team]="row.team"
+                  [fullName]="row.team_name"
+                  [teamCode]="row.team_code"
+                  [size]="18"
+                  [showName]="false"
+                />
+                  <span>{{ row.web_name }}</span>
+                </div>
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="progress">
+              <th mat-header-cell *matHeaderCellDef>
+                <span class="hdr-long">Progress</span>
+                <span class="hdr-short">Now</span>
+              </th>
+              <td mat-cell *matCellDef="let row">
+                <div class="price-progress">
+                  <span class="bar-track">
+                    <span class="bar-fill rise" [style.width.%]="progressWidth(row.progress_percent)"></span>
+                  </span>
+                  <span class="positive">{{ signedPercent(row.progress_percent) }}</span>
+                </div>
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="predicted">
+              <th mat-header-cell *matHeaderCellDef>Predicted</th>
+              <td mat-cell *matCellDef="let row">{{ signedPercent(row.predicted_percent) }}</td>
+            </ng-container>
+            <ng-container matColumnDef="outlook">
+              <th mat-header-cell *matHeaderCellDef>Outlook</th>
+              <td mat-cell *matCellDef="let row" [class.positive]="row.direction === 'rise'">
+                {{ outlookShort(row.outlook) }}
+              </td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="priceColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: priceColumns"></tr>
+          </table>
+        </div>
+      </div>
+      <div class="price-pane">
+        <h3 class="price-heading drop">Likely to drop</h3>
+        <div class="table-wrap mini-table price-wrap">
+          <table mat-table [dataSource]="watch()!.price_falls" class="pred-table data-table compact price-table">
+            <ng-container matColumnDef="player">
+              <th mat-header-cell *matHeaderCellDef>Player</th>
+              <td mat-cell *matCellDef="let row" [matTooltip]="row.full_name">
+                <div class="player-cell">
+                  <app-club-mark
+                    [team]="row.team"
+                    [fullName]="row.team_name"
+                    [teamCode]="row.team_code"
+                    [size]="18"
+                    [showName]="false"
+                  />
+                  <span>{{ row.web_name }}</span>
+                </div>
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="progress">
+              <th mat-header-cell *matHeaderCellDef>
+                <span class="hdr-long">Progress</span>
+                <span class="hdr-short">Now</span>
+              </th>
+              <td mat-cell *matCellDef="let row">
+                <div class="price-progress">
+                  <span class="bar-track">
+                    <span class="bar-fill drop" [style.width.%]="progressWidth(row.progress_percent)"></span>
+                  </span>
+                  <span class="negative">{{ signedPercent(row.progress_percent) }}</span>
+                </div>
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="predicted">
+              <th mat-header-cell *matHeaderCellDef>Predicted</th>
+              <td mat-cell *matCellDef="let row">{{ signedPercent(row.predicted_percent) }}</td>
+            </ng-container>
+            <ng-container matColumnDef="outlook">
+              <th mat-header-cell *matHeaderCellDef>Outlook</th>
+              <td mat-cell *matCellDef="let row" [class.negative]="row.direction === 'drop'">
+                {{ outlookShort(row.outlook) }}
+              </td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="priceColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: priceColumns"></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  }
+</section>
+
+@if (loadingMovers() && !dashboard()) {
+  <mat-spinner diameter="36" />
+} @else if (dashboard()) {
+  <app-market-movers [dashboard]="dashboard()!" />
+}
+
 <div class="insights-row">
   <section class="section-card compact-section">
     <h2 matTooltip="{{ tooltips.captain }}">Captain tracker</h2>
@@ -215,8 +386,106 @@
   </section>
 </div>
 
-@if (loadingMovers() && !dashboard()) {
-  <mat-spinner diameter="36" />
-} @else if (dashboard()) {
-  <app-market-movers [dashboard]="dashboard()!" />
-}
+<div class="insights-row">
+  <section class="section-card compact-section">
+    <h2 matTooltip="{{ tooltips.injured }}">Injured &amp; doubtful</h2>
+    <p class="section-desc">FPL flags, with a return date when they publish one.</p>
+    @if (loadingWatch() && !watch()) {
+      <mat-spinner diameter="28" />
+    } @else if (!watch() || watch()!.injured.length === 0) {
+      <p class="empty">No injured or doubtful players.</p>
+    } @else {
+      <div class="table-wrap mini-table">
+        <table mat-table [dataSource]="watch()!.injured" class="pred-table data-table compact watch-table">
+          <ng-container matColumnDef="player">
+            <th mat-header-cell *matHeaderCellDef>Player</th>
+            <td mat-cell *matCellDef="let row" [matTooltip]="newsTip(row)">
+              <div class="player-cell">
+                <app-club-mark
+                  [team]="row.team"
+                  [fullName]="row.team_name"
+                  [teamCode]="row.team_code"
+                  [size]="18"
+                  [showName]="false"
+                />
+                <span>{{ row.web_name }}</span>
+              </div>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef>Status</th>
+            <td mat-cell *matCellDef="let row">
+              <span
+                class="status-pill"
+                [class.status-i]="row.status === 'i'"
+                [class.status-d]="row.status === 'd'"
+                >{{ row.status_label }}</span
+              >
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="return">
+            <th mat-header-cell *matHeaderCellDef>Return</th>
+            <td mat-cell *matCellDef="let row">{{ row.return_date || '—' }}</td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="injuryColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: injuryColumns"></tr>
+        </table>
+      </div>
+    }
+  </section>
+
+  <section class="section-card compact-section">
+    <h2 matTooltip="{{ tooltips.booked }}">Booked &amp; suspended</h2>
+    <p class="section-desc">Suspensions plus players on 2+ yellows.</p>
+    @if (loadingWatch() && !watch()) {
+      <mat-spinner diameter="28" />
+    } @else if (!watch() || watch()!.booked.length === 0) {
+      <p class="empty">No booked or suspended players.</p>
+    } @else {
+      <div class="table-wrap mini-table">
+        <table mat-table [dataSource]="watch()!.booked" class="pred-table data-table compact watch-table">
+          <ng-container matColumnDef="player">
+            <th mat-header-cell *matHeaderCellDef>Player</th>
+            <td mat-cell *matCellDef="let row" [matTooltip]="newsTip(row)">
+              <div class="player-cell">
+                <app-club-mark
+                  [team]="row.team"
+                  [fullName]="row.team_name"
+                  [teamCode]="row.team_code"
+                  [size]="18"
+                  [showName]="false"
+                />
+                <span>{{ row.web_name }}</span>
+              </div>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef>Status</th>
+            <td mat-cell *matCellDef="let row">
+              <span
+                class="status-pill"
+                [class.status-s]="row.status === 's' || row.red_cards > 0"
+                [class.status-d]="row.status_label === 'Booked'"
+                >{{ row.status_label }}</span
+              >
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="yellows">
+            <th mat-header-cell *matHeaderCellDef>YC</th>
+            <td mat-cell *matCellDef="let row">{{ row.yellow_cards }}</td>
+          </ng-container>
+          <ng-container matColumnDef="reds">
+            <th mat-header-cell *matHeaderCellDef>RC</th>
+            <td mat-cell *matCellDef="let row">{{ row.red_cards }}</td>
+          </ng-container>
+          <ng-container matColumnDef="return">
+            <th mat-header-cell *matHeaderCellDef>Return</th>
+            <td mat-cell *matCellDef="let row">{{ row.return_date || '—' }}</td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="bookedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: bookedColumns"></tr>
+        </table>
+      </div>
+    }
+  </section>
+</div>

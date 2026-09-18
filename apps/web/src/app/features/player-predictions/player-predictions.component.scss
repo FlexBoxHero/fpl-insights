@@ -91,6 +91,32 @@
   overflow-x: auto;
   border-radius: 10px;
   border: 1px solid var(--fpl-border);
+  min-width: 0;
+}
+
+.price-wrap {
+  overflow-x: hidden;
+}
+
+.player-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.price-pane {
+  min-width: 0;
+}
+
+.price-table {
+  table-layout: fixed;
 }
 
 .points-paginator {
@@ -122,6 +148,120 @@
   overflow: auto;
 }
 
+.status-pill {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  background: var(--fpl-surface-2);
+}
+
+.status-i {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+}
+
+.status-d {
+  background: rgba(251, 146, 60, 0.2);
+  color: #fdba74;
+}
+
+.status-s {
+  background: rgba(168, 85, 247, 0.2);
+  color: #d8b4fe;
+}
+
+.status-a {
+  background: rgba(0, 255, 135, 0.12);
+  color: var(--fpl-accent);
+}
+
+.price-heading {
+  margin: 0 0 0.5rem;
+  font-size: 0.92rem;
+}
+
+.price-heading.rise {
+  color: var(--fpl-accent);
+}
+
+.price-heading.drop {
+  color: var(--fpl-danger);
+}
+
+.hdr-short {
+  display: none;
+}
+
+.price-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.bar-track {
+  display: block;
+  flex: 1 1 5rem;
+  min-width: 4.25rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.bar-fill.rise {
+  background: var(--fpl-accent);
+}
+
+.bar-fill.drop {
+  background: var(--fpl-danger);
+}
+
+.price-progress .positive,
+.price-progress .negative {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.price-row {
+  margin-bottom: 0;
+}
+
+.price-table .mat-column-player {
+  width: 12.5rem;
+}
+
+.price-table .mat-column-progress {
+  width: auto;
+}
+
+.price-table th.mat-column-progress {
+  text-align: center !important;
+}
+
+.price-table .mat-column-predicted {
+  width: 7.6rem;
+  white-space: nowrap;
+}
+
+.price-table .mat-column-outlook {
+  width: 6.4rem;
+}
+
+.watch-table .mat-column-status {
+  width: auto;
+}
+
 @media (max-width: 840px) {
   .filter {
     width: 100%;
@@ -137,5 +277,48 @@
 
   .pred-table .mat-column-team {
     width: 4.2rem;
+  }
+
+  .hdr-long {
+    display: none;
+  }
+
+  .hdr-short {
+    display: inline;
+  }
+
+  .bar-track {
+    display: none;
+  }
+
+  .watch-table .mat-column-chance,
+  .watch-table .mat-column-yellows,
+  .watch-table .mat-column-reds,
+  .watch-table .mat-column-badge,
+  .price-table .mat-column-predicted {
+    display: none !important;
+  }
+
+  .price-table .mat-column-player {
+    width: auto;
+  }
+
+  .price-table .mat-column-progress {
+    width: 4.8rem;
+  }
+
+  .price-table .mat-column-outlook {
+    width: 5.6rem;
+  }
+
+  .status-pill {
+    font-size: 0.64rem;
+    padding: 0.08rem 0.35rem;
+  }
+
+  .compact td,
+  .compact th {
+    padding-left: 0.4rem !important;
+    padding-right: 0.4rem !important;
   }
 }

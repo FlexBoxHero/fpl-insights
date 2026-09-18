@@ -2,8 +2,32 @@ h1 {
   margin-top: 0;
 }
 
+.lead {
+  max-width: 46rem;
+  font-size: 1.05rem;
+  line-height: 1.55;
+}
+
 h2 {
   margin-top: 1.5rem;
+}
+
+.coming-intro {
+  max-width: 46rem;
+  color: var(--fpl-muted);
+  margin: 0.35rem 0 0.75rem;
+}
+
+.coming-list {
+  max-width: 46rem;
+
+  li {
+    margin-bottom: 0.45rem;
+  }
+
+  strong {
+    color: var(--fpl-accent);
+  }
 }
 
 @media (max-width: 840px) {

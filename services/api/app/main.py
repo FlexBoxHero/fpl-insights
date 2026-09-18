@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app import insights_service
 from app.chip_strategy import build_chip_strategy, parse_chips
+from app.player_watch import player_watch
 from app.schemas import (
     BonusOutlookOut,
     CaptainPickOut,
@@ -21,6 +22,7 @@ from app.schemas import (
     ModelMetaOut,
     PlayerPredictionOut,
     PlayerSeasonStatOut,
+    PlayerWatchOut,
     SquadAnalysisIn,
     SquadScreenshotIn,
     SquadVisionStatusOut,
@@ -257,6 +259,11 @@ def captain_insights(
     db: Session = Depends(get_db),
 ) -> list[CaptainPickOut]:
     return insights_service.captain_picks(db, gameweek)
+
+
+@app.get("/v1/insights/player-watch", response_model=PlayerWatchOut)
+def player_watch_insights(db: Session = Depends(get_db)) -> PlayerWatchOut:
+    return PlayerWatchOut(**player_watch(db))
 
 
 @app.get("/v1/insights/defensive-contributions", response_model=list[DefensiveContribOut])

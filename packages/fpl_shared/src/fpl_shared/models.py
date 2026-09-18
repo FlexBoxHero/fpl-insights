@@ -84,6 +84,17 @@ class Player(Base):
     transfers_out: Mapped[int] = mapped_column(Integer, default=0)
     cost_change_event: Mapped[int] = mapped_column(Integer, default=0)
     cost_change_start: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(8), default="a")
+    news: Mapped[str | None] = mapped_column(Text, nullable=True)
+    news_added: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    chance_of_playing_this_round: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    chance_of_playing_next_round: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    yellow_cards: Mapped[int] = mapped_column(Integer, default=0)
+    red_cards: Mapped[int] = mapped_column(Integer, default=0)
+    price_change_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    price_change_projected_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    price_change_likelihood: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    price_change_calibrating: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class Fixture(Base):

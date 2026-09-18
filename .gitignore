@@ -17,3 +17,7 @@ apps/web/.angular/
 Thumbs.db
 *.log
 
+# Zip/share leftovers — local setup is in README.md
+README_SHARE.txt
+SETUP_INSTRUCTIONS.md
+

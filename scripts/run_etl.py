@@ -33,18 +33,22 @@ def main() -> None:
     try:
         seed_team_aliases(db)
         if not args.skip_backfill:
+            print("Starting historical backfill...", flush=True)
             vaastav_stats = backfill_all_vaastav(db, args.seasons)
             core_stats = backfill_all_core_insights(db, CORE_SEASONS)
-            print("Vaastav:", vaastav_stats)
-            print("Core Insights:", core_stats)
+            print("Vaastav:", vaastav_stats, flush=True)
+            print("Core Insights:", core_stats, flush=True)
+        print("Syncing current season from FPL...", flush=True)
         sync_current_season_from_api(db)
         gw_stats = 0
         if not args.skip_player_sync:
+            print("Syncing current-season player gameweek stats...", flush=True)
             gw_stats = sync_current_season_player_gw_stats(db)
+        print("Ingesting match stats...", flush=True)
         stats = ingest_match_stats(db)
         stats["player_gw_synced"] = gw_stats
         record_etl_run(db, "full_etl", "success", str(stats))
-        print("ETL complete:", stats)
+        print("ETL complete:", stats, flush=True)
     except Exception as exc:
         record_etl_run(db, "full_etl", "failed", str(exc))
         raise

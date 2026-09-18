@@ -10,9 +10,17 @@ import pandas as pd
 from dateutil import parser as date_parser
 from sqlalchemy.orm import Session
 
+from fpl_etl.bulk import (
+    existing_player_gw_keys,
+    fixture_ids,
+    flush_player_gw_rows,
+    gameweeks_by_number,
+    players_by_element,
+    teams_by_fpl_id,
+)
 from fpl_etl.vaastav_backfill import ELEMENT_TYPE_MAP, _read_csv_bytes, _safe_float, _safe_int, ensure_season
 from fpl_shared.config import settings
-from fpl_shared.models import Fixture, Gameweek, Player, PlayerGameweekStat, Team
+from fpl_shared.models import Fixture, Gameweek, Player, Team
 
 CORE_SEASONS = ["2025-26"]
 CORE_SEASON_FOLDERS = {"2025-26": "2025-2026"}
@@ -85,22 +93,19 @@ def load_core_insights_season(db: Session, season_code: str) -> dict[str, int]:
         raise ValueError(f"No Core Insights folder mapped for {season_code}")
 
     season = ensure_season(db, season_code, is_current=False)
+    print(f"Loading Core Insights {season_code}...", flush=True)
 
     teams_df = _fetch_core_csv(folder, "teams.csv")
     if teams_df is None:
         raise FileNotFoundError(f"Core Insights teams.csv missing for {season_code}")
 
-    team_by_fpl: dict[int, Team] = {}
-    team_by_code: dict[int, Team] = {}
+    team_by_fpl = teams_by_fpl_id(db, season.id)
+    team_by_code: dict[int, Team] = {t.code: t for t in team_by_fpl.values() if t.code}
     for _, row in teams_df.iterrows():
         fpl_id = _safe_int(row.get("id"))
         if not fpl_id:
             continue
-        team = (
-            db.query(Team)
-            .filter(Team.season_id == season.id, Team.fpl_team_id == fpl_id)
-            .first()
-        )
+        team = team_by_fpl.get(fpl_id)
         if not team:
             team = Team(
                 season_id=season.id,
@@ -111,7 +116,7 @@ def load_core_insights_season(db: Session, season_code: str) -> dict[str, int]:
             )
             db.add(team)
             db.flush()
-        team_by_fpl[fpl_id] = team
+            team_by_fpl[fpl_id] = team
         code = _safe_int(row.get("code"))
         if code:
             team_by_code[code] = team
@@ -121,38 +126,34 @@ def load_core_insights_season(db: Session, season_code: str) -> dict[str, int]:
     if players_df is None:
         raise FileNotFoundError(f"Core Insights players.csv missing for {season_code}")
 
-    element_to_player: dict[int, Player] = {}
+    element_to_player = players_by_element(db, season.id)
     for _, row in players_df.iterrows():
         element_id = _safe_int(row.get("player_id") or row.get("id"))
-        if not element_id:
+        if not element_id or element_id in element_to_player:
             continue
         team_code = _safe_int(row.get("team_code") or row.get("team"))
         team = team_by_code.get(team_code) or team_by_fpl.get(team_code)
-        player = (
-            db.query(Player)
-            .filter(Player.season_id == season.id, Player.fpl_element_id == element_id)
-            .first()
+        player = Player(
+            season_id=season.id,
+            fpl_element_id=element_id,
+            team_id=team.id if team else None,
+            web_name=str(row.get("web_name", "Unknown"))[:128],
+            first_name=str(row.get("first_name") or "")[:64] or None,
+            second_name=str(row.get("second_name") or "")[:64] or None,
+            position=_map_position(row.get("position")),
+            now_cost=0,
+            selected_by_percent=0.0,
         )
-        if not player:
-            player = Player(
-                season_id=season.id,
-                fpl_element_id=element_id,
-                team_id=team.id if team else None,
-                web_name=str(row.get("web_name", "Unknown"))[:128],
-                first_name=str(row.get("first_name") or "")[:64] or None,
-                second_name=str(row.get("second_name") or "")[:64] or None,
-                position=_map_position(row.get("position")),
-                now_cost=0,
-                selected_by_percent=0.0,
-            )
-            db.add(player)
-            db.flush()
+        db.add(player)
+        db.flush()
         element_to_player[element_id] = player
     db.commit()
 
-    gw_map: dict[int, Gameweek] = {}
+    gw_map = gameweeks_by_number(db, season.id)
+    existing_fixtures = fixture_ids(db, season.id)
+    seen_stats = existing_player_gw_keys(db, season.id)
     fixtures_count = 0
-    stats_count = 0
+    pending_stats: list[dict] = []
 
     for gw_num in range(1, 39):
         gw_label = f"GW{gw_num}"
@@ -163,13 +164,9 @@ def load_core_insights_season(db: Session, season_code: str) -> dict[str, int]:
 
         if fixtures_df is None and stats_df is None:
             continue
-        print(f"Loading Core Insights {season_code} {gw_label}...")
+        print(f"Loading Core Insights {season_code} {gw_label}...", flush=True)
 
-        gw = (
-            db.query(Gameweek)
-            .filter(Gameweek.season_id == season.id, Gameweek.number == gw_num)
-            .first()
-        )
+        gw = gw_map.get(gw_num)
         if not gw:
             gw = Gameweek(
                 season_id=season.id,
@@ -179,7 +176,7 @@ def load_core_insights_season(db: Session, season_code: str) -> dict[str, int]:
             )
             db.add(gw)
             db.flush()
-        gw_map[gw_num] = gw
+            gw_map[gw_num] = gw
 
         if fixtures_df is not None:
             if "tournament" in fixtures_df.columns:
@@ -193,17 +190,7 @@ def load_core_insights_season(db: Session, season_code: str) -> dict[str, int]:
                 if not home_team or not away_team:
                     continue
                 fpl_fixture_id = _stable_fixture_id(row)
-                if not fpl_fixture_id:
-                    continue
-                fixture = (
-                    db.query(Fixture)
-                    .filter(
-                        Fixture.season_id == season.id,
-                        Fixture.fpl_fixture_id == fpl_fixture_id,
-                    )
-                    .first()
-                )
-                if fixture:
+                if not fpl_fixture_id or fpl_fixture_id in existing_fixtures:
                     continue
                 finished = row.get("finished", True)
                 if isinstance(finished, str):
@@ -226,6 +213,7 @@ def load_core_insights_season(db: Session, season_code: str) -> dict[str, int]:
                         away_score=_safe_int(away_score) if pd.notna(away_score) else None,
                     )
                 )
+                existing_fixtures.add(fpl_fixture_id)
                 fixtures_count += 1
             db.commit()
 
@@ -245,49 +233,41 @@ def load_core_insights_season(db: Session, season_code: str) -> dict[str, int]:
             row_gw = _safe_int(row.get(gw_col), gw_num) if gw_col in stats_df.columns else gw_num
             if not element_id or row_gw < 1:
                 continue
-            existing = (
-                db.query(PlayerGameweekStat)
-                .filter(
-                    PlayerGameweekStat.season_id == season.id,
-                    PlayerGameweekStat.fpl_element_id == element_id,
-                    PlayerGameweekStat.gameweek_number == row_gw,
-                )
-                .first()
-            )
-            if existing:
+            key = (element_id, row_gw)
+            if key in seen_stats:
                 continue
             player = element_to_player.get(element_id)
             if player:
                 player.now_cost = _cost_tenths(row.get("now_cost") or row.get("value")) or player.now_cost
                 if pd.notna(row.get("selected_by_percent")):
                     player.selected_by_percent = _safe_float(row.get("selected_by_percent"))
-            db.add(
-                PlayerGameweekStat(
-                    season_id=season.id,
-                    fpl_element_id=element_id,
-                    player_id=player.id if player else None,
-                    gameweek_number=row_gw,
-                    total_points=_safe_int(row.get("total_points")),
-                    minutes=_safe_int(row.get("minutes")),
-                    goals_scored=_safe_int(row.get("goals_scored")),
-                    assists=_safe_int(row.get("assists")),
-                    clean_sheets=_safe_int(row.get("clean_sheets")),
-                    goals_conceded=_safe_int(row.get("goals_conceded")),
-                    bonus=_safe_int(row.get("bonus")),
-                    bps=_safe_int(row.get("bps")),
-                    influence=_safe_float(row.get("influence")),
-                    creativity=_safe_float(row.get("creativity")),
-                    threat=_safe_float(row.get("threat")),
-                    ict_index=_safe_float(row.get("ict_index")),
-                    expected_goals=_safe_float(row.get("expected_goals") or row.get("xG")),
-                    expected_assists=_safe_float(row.get("expected_assists") or row.get("xA")),
-                    xP=_safe_float(row.get("xP")) if pd.notna(row.get("xP")) else None,
-                )
+            pending_stats.append(
+                {
+                    "season_id": season.id,
+                    "fpl_element_id": element_id,
+                    "player_id": player.id if player else None,
+                    "gameweek_number": row_gw,
+                    "total_points": _safe_int(row.get("total_points")),
+                    "minutes": _safe_int(row.get("minutes")),
+                    "goals_scored": _safe_int(row.get("goals_scored")),
+                    "assists": _safe_int(row.get("assists")),
+                    "clean_sheets": _safe_int(row.get("clean_sheets")),
+                    "goals_conceded": _safe_int(row.get("goals_conceded")),
+                    "bonus": _safe_int(row.get("bonus")),
+                    "bps": _safe_int(row.get("bps")),
+                    "influence": _safe_float(row.get("influence")),
+                    "creativity": _safe_float(row.get("creativity")),
+                    "threat": _safe_float(row.get("threat")),
+                    "ict_index": _safe_float(row.get("ict_index")),
+                    "expected_goals": _safe_float(row.get("expected_goals") or row.get("xG")),
+                    "expected_assists": _safe_float(row.get("expected_assists") or row.get("xA")),
+                    "xP": _safe_float(row.get("xP")) if pd.notna(row.get("xP")) else None,
+                }
             )
-            stats_count += 1
-            if stats_count % 5000 == 0:
-                db.commit()
-        db.commit()
+            seen_stats.add(key)
+
+    db.commit()
+    stats_count = flush_player_gw_rows(db, pending_stats)
 
     return {
         "teams": len(team_by_fpl),
@@ -303,6 +283,7 @@ def backfill_all_core_insights(
     seasons = seasons or CORE_SEASONS
     results: dict[str, dict[str, int]] = {}
     for code in seasons:
-        print(f"Backfilling Core Insights {code}...")
+        print(f"Backfilling Core Insights {code}...", flush=True)
         results[code] = load_core_insights_season(db, code)
+        print(f"Finished Core Insights {code}: {results[code]}", flush=True)
     return results

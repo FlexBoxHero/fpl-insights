@@ -346,3 +346,57 @@ export interface SquadScreenshotResult {
   matched: number;
   needed: number;
 }
+
+export interface PlayerWatchBrief {
+  player_id: number;
+  fpl_element_id: number;
+  web_name: string;
+  full_name: string;
+  team: string;
+  team_name?: string | null;
+  team_code?: number | null;
+  position: string;
+  price: number;
+}
+
+export interface InjuryRow extends PlayerWatchBrief {
+  status: string;
+  status_label: string;
+  news?: string | null;
+  return_date?: string | null;
+  chance_of_playing?: number | null;
+}
+
+export interface BookedRow extends PlayerWatchBrief {
+  status: string;
+  status_label: string;
+  news?: string | null;
+  return_date?: string | null;
+  yellow_cards: number;
+  red_cards: number;
+}
+
+export interface CaptainedRow extends PlayerWatchBrief {
+  badge: string;
+  ownership_pct: number;
+}
+
+export interface PriceChangeRow extends PlayerWatchBrief {
+  progress_percent: number;
+  predicted_percent?: number | null;
+  likelihood?: number | null;
+  outlook: string;
+  direction: string;
+  calibrating?: boolean;
+}
+
+export interface PlayerWatch {
+  source: string;
+  gameweek_number?: number | null;
+  injured: InjuryRow[];
+  booked: BookedRow[];
+  most_captained: CaptainedRow[];
+  price_rises: PriceChangeRow[];
+  price_falls: PriceChangeRow[];
+  price_calibrating: boolean;
+}

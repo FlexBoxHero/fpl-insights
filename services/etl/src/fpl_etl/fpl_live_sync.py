@@ -13,6 +13,71 @@ from fpl_shared.models import Fixture, Gameweek, Player, Season, Team
 ELEMENT_TYPE_MAP = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
 
 
+def _as_float(value: object, default: float | None = None) -> float | None:
+    if value is None or value == "":
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_int(value: object, default: int | None = None) -> int | None:
+    if value is None or value == "":
+        return default
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def _parse_dt(value: object) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return date_parser.isoparse(str(value))
+    except (ValueError, TypeError):
+        return None
+
+
+def _projected_price_change(el: dict) -> tuple[float | None, int | None]:
+    projections = el.get("price_change_projections") or []
+    if not projections or not isinstance(projections, list):
+        return None, None
+    tonight = projections[0] if isinstance(projections[0], dict) else {}
+    return _as_float(tonight.get("projected_percent")), _as_int(tonight.get("likelihood"))
+
+
+def apply_player_live_fields(player: Player, el: dict, team_id: int | None, position: str) -> None:
+    projected_pct, likelihood = _projected_price_change(el)
+    player.team_id = team_id
+    player.web_name = el["web_name"]
+    player.first_name = el.get("first_name")
+    player.second_name = el.get("second_name")
+    player.position = position
+    player.now_cost = int(el.get("now_cost", 0) or 0)
+    player.selected_by_percent = float(el.get("selected_by_percent", 0) or 0)
+    player.ep_next = _as_float(el.get("ep_next"))
+    player.form = _as_float(el.get("form"))
+    player.transfers_in_event = int(el.get("transfers_in_event", 0) or 0)
+    player.transfers_out_event = int(el.get("transfers_out_event", 0) or 0)
+    player.transfers_in = int(el.get("transfers_in", 0) or 0)
+    player.transfers_out = int(el.get("transfers_out", 0) or 0)
+    player.cost_change_event = int(el.get("cost_change_event", 0) or 0)
+    player.cost_change_start = int(el.get("cost_change_start", 0) or 0)
+    player.status = str(el.get("status") or "a")[:8]
+    player.news = (el.get("news") or "").strip() or None
+    player.news_added = _parse_dt(el.get("news_added"))
+    player.chance_of_playing_this_round = _as_int(el.get("chance_of_playing_this_round"))
+    player.chance_of_playing_next_round = _as_int(el.get("chance_of_playing_next_round"))
+    player.yellow_cards = int(el.get("yellow_cards", 0) or 0)
+    player.red_cards = int(el.get("red_cards", 0) or 0)
+    player.price_change_percent = _as_float(el.get("price_change_percent"))
+    player.price_change_projected_percent = projected_pct
+    player.price_change_likelihood = likelihood
+    player.price_change_calibrating = bool(el.get("price_change_calibrating"))
+
+
 def _current_season_code(events: list[dict]) -> str:
     if not events:
         return datetime.now(timezone.utc).strftime("%Y") + "-" + str(int(datetime.now().year) + 1)[-2:]
@@ -115,39 +180,11 @@ def sync_current_season_from_api(db: Session) -> dict[str, int | str]:
             player = Player(
                 season_id=season.id,
                 fpl_element_id=element_id,
-                team_id=team.id if team else None,
                 web_name=el["web_name"],
-                first_name=el.get("first_name"),
-                second_name=el.get("second_name"),
                 position=position,
-                now_cost=int(el.get("now_cost", 0)),
-                selected_by_percent=float(el.get("selected_by_percent", 0)),
-                ep_next=float(el["ep_next"]) if el.get("ep_next") is not None else None,
-                form=float(el["form"]) if el.get("form") is not None else None,
-                transfers_in_event=int(el.get("transfers_in_event", 0)),
-                transfers_out_event=int(el.get("transfers_out_event", 0)),
-                transfers_in=int(el.get("transfers_in", 0)),
-                transfers_out=int(el.get("transfers_out", 0)),
-                cost_change_event=int(el.get("cost_change_event", 0)),
-                cost_change_start=int(el.get("cost_change_start", 0)),
             )
             db.add(player)
-        else:
-            player.team_id = team.id if team else None
-            player.web_name = el["web_name"]
-            player.first_name = el.get("first_name")
-            player.second_name = el.get("second_name")
-            player.position = position
-            player.now_cost = int(el.get("now_cost", 0))
-            player.selected_by_percent = float(el.get("selected_by_percent", 0))
-            player.ep_next = float(el["ep_next"]) if el.get("ep_next") is not None else None
-            player.form = float(el["form"]) if el.get("form") is not None else None
-            player.transfers_in_event = int(el.get("transfers_in_event", 0))
-            player.transfers_out_event = int(el.get("transfers_out_event", 0))
-            player.transfers_in = int(el.get("transfers_in", 0))
-            player.transfers_out = int(el.get("transfers_out", 0))
-            player.cost_change_event = int(el.get("cost_change_event", 0))
-            player.cost_change_start = int(el.get("cost_change_start", 0))
+        apply_player_live_fields(player, el, team.id if team else None, position)
         player_count += 1
     db.commit()
 

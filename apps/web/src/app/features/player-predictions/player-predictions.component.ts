@@ -10,7 +10,7 @@ import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ApiService } from '../../core/api.service';
 import { GameweekStore } from '../../core/gameweek.store';
-import { CaptainPick, DefensiveContrib, HomeDashboard, PlayerPrediction } from '../../core/models';
+import { CaptainPick, DefensiveContrib, HomeDashboard, PlayerPrediction, PlayerWatch } from '../../core/models';
 import { ClubMarkComponent } from '../../shared/club-mark/club-mark.component';
 import { MarketMoversComponent } from '../../shared/market-movers/market-movers.component';
 
@@ -44,6 +44,7 @@ export class PlayerPredictionsComponent {
   readonly loadingCaptain = signal(false);
   readonly loadingDef = signal(false);
   readonly loadingMovers = signal(false);
+  readonly loadingWatch = signal(false);
 
   readonly allRows = signal<PlayerPrediction[]>([]);
   readonly compareIds = signal<number[]>([]);
@@ -66,6 +67,7 @@ export class PlayerPredictionsComponent {
   readonly captains = signal<CaptainPick[]>([]);
   readonly defensive = signal<DefensiveContrib[]>([]);
   readonly dashboard = signal<HomeDashboard | null>(null);
+  readonly watch = signal<PlayerWatch | null>(null);
 
   readonly captainPreview = computed(() => this.captains().slice(0, INSIGHTS_ROW_LIMIT));
   readonly defensivePreview = computed(() => this.defensive().slice(0, INSIGHTS_ROW_LIMIT));
@@ -88,6 +90,10 @@ export class PlayerPredictionsComponent {
 
   readonly captainColumns = ['rank', 'player', 'captainXp'];
   readonly defColumns = ['player', 'likelihood'];
+  readonly injuryColumns = ['player', 'status', 'return'];
+  readonly bookedColumns = ['player', 'status', 'yellows', 'reds', 'return'];
+  readonly captainedColumns = ['rank', 'player', 'badge', 'owned'];
+  readonly priceColumns = ['player', 'progress', 'predicted', 'outlook'];
 
   readonly tooltips = {
     compare: 'Select up to 3 players to compare side by side.',
@@ -98,6 +104,12 @@ export class PlayerPredictionsComponent {
     captain: 'Top captain options ranked by 2× model expected points.',
     defensive:
       'Estimated chance of hitting defensive contribution thresholds (DEF 10+, MID 12+). Based on minutes and form; not official CBIT data.',
+    injured: 'Official FPL injury and doubt flags, including a return date when FPL publishes one.',
+    booked: 'Suspended players, plus anyone on 2+ yellows this season.',
+    captained:
+      'Official most captained and most vice-captained this gameweek. Remaining spots are the next most-owned players — FPL only names one captain leader.',
+    price:
+      'Official FPL Price Change Predictor. Progress is toward a rise (positive) or drop (negative) at 00:00 UK. Over 100% means a change is expected unless transfers swing the other way.',
   };
 
   constructor() {
@@ -111,6 +123,7 @@ export class PlayerPredictionsComponent {
         this.fetchCaptain(gw);
         this.fetchDefensive(gw);
         this.fetchMovers();
+        this.fetchWatch();
       }
     });
   }
@@ -198,6 +211,29 @@ export class PlayerPredictionsComponent {
     return value * 100;
   }
 
+  newsTip(row: { full_name: string; news?: string | null }): string {
+    return row.news ? `${row.full_name} — ${row.news}` : row.full_name;
+  }
+
+  progressWidth(percent: number): number {
+    return (Math.min(Math.abs(percent), 150) / 150) * 100;
+  }
+
+  signedPercent(value: number | null | undefined): string {
+    if (value == null) {
+      return '—';
+    }
+    const rounded = value.toFixed(1);
+    return value > 0 ? `+${rounded}%` : `${rounded}%`;
+  }
+
+  outlookShort(label: string): string {
+    return label
+      .replace(' to rise', '')
+      .replace(' to drop', '')
+      .replace(' to change', '');
+  }
+
   private fetchPoints(gw: number, position?: string): void {
     this.loading.set(true);
     this.api.getPlayerPredictions(gw, position).subscribe({
@@ -250,6 +286,20 @@ export class PlayerPredictionsComponent {
       error: () => {
         this.dashboard.set(null);
         this.loadingMovers.set(false);
+      },
+    });
+  }
+
+  private fetchWatch(): void {
+    this.loadingWatch.set(true);
+    this.api.getPlayerWatch().subscribe({
+      next: (data) => {
+        this.watch.set(data);
+        this.loadingWatch.set(false);
+      },
+      error: () => {
+        this.watch.set(null);
+        this.loadingWatch.set(false);
       },
     });
   }

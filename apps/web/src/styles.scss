@@ -116,6 +116,7 @@ textarea {
   padding: 1.25rem 1.35rem;
   margin-bottom: 1rem;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+  min-width: 0;
 
   h2 {
     margin: 0 0 0.35rem;
@@ -240,6 +241,7 @@ textarea {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
   margin-bottom: 1rem;
+  min-width: 0;
 }
 
 @media (max-width: 900px) {

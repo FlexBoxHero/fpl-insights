@@ -296,3 +296,57 @@ class SquadScreenshotIn(BaseModel):
 
 class SquadVisionStatusOut(BaseModel):
     enabled: bool
+
+
+class PlayerWatchBriefOut(BaseModel):
+    player_id: int
+    fpl_element_id: int
+    web_name: str
+    full_name: str
+    team: str
+    team_name: str | None = None
+    team_code: int | None = None
+    position: str
+    price: float
+
+
+class InjuryRowOut(PlayerWatchBriefOut):
+    status: str
+    status_label: str
+    news: str | None = None
+    return_date: str | None = None
+    chance_of_playing: int | None = None
+
+
+class BookedRowOut(PlayerWatchBriefOut):
+    status: str
+    status_label: str
+    news: str | None = None
+    return_date: str | None = None
+    yellow_cards: int = 0
+    red_cards: int = 0
+
+
+class CaptainedRowOut(PlayerWatchBriefOut):
+    badge: str
+    ownership_pct: float
+
+
+class PriceChangeRowOut(PlayerWatchBriefOut):
+    progress_percent: float
+    predicted_percent: float | None = None
+    likelihood: int | None = None
+    outlook: str
+    direction: str
+    calibrating: bool = False
+
+
+class PlayerWatchOut(BaseModel):
+    source: str
+    gameweek_number: int | None = None
+    injured: list[InjuryRowOut]
+    booked: list[BookedRowOut]
+    most_captained: list[CaptainedRowOut]
+    price_rises: list[PriceChangeRowOut]
+    price_falls: list[PriceChangeRowOut]
+    price_calibrating: bool = False

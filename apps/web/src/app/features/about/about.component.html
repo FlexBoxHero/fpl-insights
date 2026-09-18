@@ -1,8 +1,31 @@
-<h1>Methodology</h1>
-<p>
-  FPL Insights is an experimental analytics tool. It is not affiliated with the Premier League or
-  Fantasy Premier League.
+<h1>About</h1>
+<p class="lead">
+  FPL Insights is a companion for Fantasy Premier League. Use it to see who looks good this week,
+  plan chips, and check your own squad. It is not affiliated with the Premier League or Fantasy
+  Premier League.
 </p>
+
+<h2>What the app does</h2>
+<ul>
+  <li>
+    <strong>Home</strong> — season stats, recent form, and who is moving in price or transfers.
+  </li>
+  <li>
+    <strong>Players</strong> — expected points, captain ideas, injuries and suspensions, the most
+    captained names, and who is close to a price rise or drop.
+  </li>
+  <li>
+    <strong>Teams</strong> — upcoming fixtures, clean-sheet odds, and projected goals for every
+    club.
+  </li>
+  <li>
+    <strong>Chips</strong> — when to play Wildcard, Free Hit, Bench Boost, and Triple Captain.
+  </li>
+  <li>
+    <strong>My Team</strong> — load your 15, rate the squad, spot weak starters, and see
+    one-transfer upgrades.
+  </li>
+</ul>
 
 <h2>Data</h2>
 <ul>
@@ -19,13 +42,13 @@
   </li>
 </ul>
 
-<h2>Models (Phase 1)</h2>
+<h2>How picks are modelled</h2>
 <ul>
   <li>Teams: Poisson goal rates from rolling results + logistic clean-sheet calibration</li>
   <li>Players: LightGBM on rolling FPL stats and fixture difficulty</li>
 </ul>
 
-<h2>Chip strategy (Phase 2)</h2>
+<h2>Chip strategy</h2>
 <ul>
   <li>
     Two of each chip per season: one in GW1–19 and one in GW20–38 (Wildcard, Bench Boost, Triple
@@ -38,7 +61,7 @@
   <li>Advice is league-wide — it does not use your actual squad.</li>
 </ul>
 
-<h2>My Team (Phase 3)</h2>
+<h2>My Team</h2>
 <ul>
   <li>
     Load your 15 via FPL team ID, the in-app picker, or a squad screenshot (screenshot needs a
@@ -50,13 +73,26 @@
   </li>
 </ul>
 
-@if (meta(); as m) {
-  <h2>Runtime</h2>
-  <p>Model version: <strong>{{ m.model_version }}</strong></p>
-  @if (m.last_etl_at) {
-    <p>
-      Last pipeline run: {{ m.last_etl_job }} ({{ m.last_etl_status }}) at
-      {{ m.last_etl_at | date: 'medium' }}
-    </p>
-  }
-}
+<h2>Coming soon</h2>
+<p class="coming-intro">More games and deeper tools on the way. Nothing here is live yet.</p>
+<ul class="coming-list">
+  <li>
+    <strong>UCL Fantasy</strong> — the same style of picks and insights for UEFA Champions League
+    Fantasy.
+  </li>
+  <li>
+    <strong>World Cup / Euro Fantasy</strong> — coverage when the big international tournaments
+    roll around.
+  </li>
+  <li>
+    <strong>Transfer analysis</strong> — real-world club ins and outs, and what they mean for
+    minutes, roles, and FPL value.
+  </li>
+  <li>
+    <strong>Match analysis</strong> — tactical breakdowns of big games: setups, manager gameplay,
+    and what actually happened on the pitch.
+  </li>
+  <li>
+    <strong>Live gameweek</strong> — points, bonuses, and flags as matches are being played.
+  </li>
+</ul>

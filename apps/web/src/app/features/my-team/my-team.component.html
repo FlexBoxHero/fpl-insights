@@ -227,8 +227,8 @@
     <div>
       <h2>
         GW{{ a.gameweek }} · {{ a.formation }}
-        @if (a.entry?.name) {
-          <span class="range">{{ a.entry?.name }}</span>
+        @if (a.entry?.name; as teamName) {
+          <span class="range">{{ teamName }}</span>
         }
       </h2>
       <p class="section-desc">{{ a.rating_reason }}</p>
