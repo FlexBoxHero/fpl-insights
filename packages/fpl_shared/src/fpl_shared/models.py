@@ -141,7 +141,14 @@ class PlayerGameweekStat(Base):
     ict_index: Mapped[float] = mapped_column(Float, default=0.0)
     expected_goals: Mapped[float] = mapped_column(Float, default=0.0)
     expected_assists: Mapped[float] = mapped_column(Float, default=0.0)
+    expected_goals_conceded: Mapped[float] = mapped_column(Float, default=0.0)
+    starts: Mapped[int] = mapped_column(Integer, default=0)
     xP: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # FPL publishes CBI as one total (not split clearances / blocks / interceptions).
+    clearances_blocks_interceptions: Mapped[int] = mapped_column(Integer, default=0)
+    tackles: Mapped[int] = mapped_column(Integer, default=0)
+    recoveries: Mapped[int] = mapped_column(Integer, default=0)
+    defensive_contribution: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class MatchStat(Base):

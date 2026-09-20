@@ -1,6 +1,9 @@
 <header class="topbar">
   <div class="topbar-inner">
-    <a routerLink="/" class="brand">FPL Insights</a>
+    <a routerLink="/" class="brand">
+      <img class="brand-mark" src="favicon.svg" width="28" height="28" alt="" />
+      <span>FPL Insights</span>
+    </a>
     <nav class="nav nav-desktop" aria-label="Primary">
       <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Home</a>
       <a routerLink="/teams" routerLinkActive="active">Teams</a>
@@ -18,6 +21,15 @@
       About
     </a>
     <span class="spacer"></span>
+    <button
+      type="button"
+      class="theme-toggle"
+      (click)="toggleTheme()"
+      [attr.aria-label]="themeLabel()"
+      [attr.title]="themeLabel()"
+    >
+      <span class="material-icons" aria-hidden="true">{{ themeIcon() }}</span>
+    </button>
     <app-deadline-banner />
   </div>
 </header>

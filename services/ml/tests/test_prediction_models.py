@@ -153,7 +153,7 @@ def test_fixture_context_sums_double_gameweek_xG():
     assert ctx is not None and single is not None
     assert ctx["n_fixtures"] == 2
     assert ctx["lam_for"] > single["lam_for"]
-    assert set(FEATURE_COLS).issuperset({"n_fixtures", "lam_for", "lam_against", "roll3_xa"})
+    assert set(FEATURE_COLS).issuperset({"n_fixtures", "lam_for", "lam_against", "roll3_xa", "roll3_cbit", "roll3_cbirt_p90"})
 
 
 def test_prior_season_keeps_elite_teams_strong_at_gw1():

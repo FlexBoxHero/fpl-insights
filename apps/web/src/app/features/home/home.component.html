@@ -1,38 +1,211 @@
 <div class="page-header hero">
   <h1>Dashboard</h1>
-  <p class="subtitle">Last-gameweek standouts and season stats.</p>
+  <p class="subtitle">Gameweek status, ownership, and season stats.</p>
+</div>
+
+<div class="status-row">
+  <section class="section-card compact-section">
+    <h2>Most captained</h2>
+    <p class="section-desc">
+      @if (watch()?.captain_sample_size) {
+        Captain armbands among the top {{ watch()!.captain_sample_size }} of Overall
+        @if (watch()?.gameweek_number) {
+          for GW{{ watch()!.gameweek_number }}.
+        } @else {
+          this gameweek.
+        }
+        Not the same as ownership.
+      } @else {
+        Official FPL most-captained player
+        @if (watch()?.gameweek_number) {
+          for GW{{ watch()!.gameweek_number }}.
+        } @else {
+          this gameweek.
+        }
+      }
+    </p>
+    @if (loadingWatch() && !watch()) {
+      <mat-spinner diameter="28" />
+    } @else if (mostCaptained().length === 0) {
+      <p class="empty">No captain data yet.</p>
+    } @else {
+      <div class="table-wrap mini-table">
+        <table mat-table [dataSource]="mostCaptained()" class="pred-table data-table compact">
+          <ng-container matColumnDef="rank">
+            <th mat-header-cell *matHeaderCellDef>#</th>
+            <td mat-cell *matCellDef="let row; let i = index">{{ i + 1 }}</td>
+          </ng-container>
+          <ng-container matColumnDef="player">
+            <th mat-header-cell *matHeaderCellDef>Player</th>
+            <td mat-cell *matCellDef="let row" [matTooltip]="row.full_name">
+              <div class="player-cell">
+                <app-club-mark
+                  [team]="row.team"
+                  [fullName]="row.team_name"
+                  [teamCode]="row.team_code"
+                  [size]="18"
+                  [showName]="false"
+                />
+                <span>{{ row.web_name }}</span>
+              </div>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="cap">
+            <th mat-header-cell *matHeaderCellDef>Cap %</th>
+            <td mat-cell *matCellDef="let row">
+              @if (row.captain_pct != null) {
+                {{ row.captain_pct | number: '1.0-1' }}%
+              } @else {
+                Official
+              }
+            </td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="captainedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: captainedColumns"></tr>
+        </table>
+      </div>
+    }
+  </section>
+
+  <section class="section-card compact-section">
+    <h2>Most selected</h2>
+    <p class="section-desc">Highest ownership in the game.</p>
+    @if (loadingWatch() && !watch()) {
+      <mat-spinner diameter="28" />
+    } @else if (mostSelected().length === 0) {
+      <p class="empty">No ownership data yet.</p>
+    } @else {
+      <div class="table-wrap mini-table">
+        <table mat-table [dataSource]="mostSelected()" class="pred-table data-table compact">
+          <ng-container matColumnDef="rank">
+            <th mat-header-cell *matHeaderCellDef>#</th>
+            <td mat-cell *matCellDef="let row; let i = index">{{ i + 1 }}</td>
+          </ng-container>
+          <ng-container matColumnDef="player">
+            <th mat-header-cell *matHeaderCellDef>Player</th>
+            <td mat-cell *matCellDef="let row" [matTooltip]="row.full_name">
+              <div class="player-cell">
+                <app-club-mark
+                  [team]="row.team"
+                  [fullName]="row.team_name"
+                  [teamCode]="row.team_code"
+                  [size]="18"
+                  [showName]="false"
+                />
+                <span>{{ row.web_name }}</span>
+              </div>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="owned">
+            <th mat-header-cell *matHeaderCellDef>Own</th>
+            <td mat-cell *matCellDef="let row">{{ row.ownership_pct | number: '1.0-1' }}%</td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="selectedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: selectedColumns"></tr>
+        </table>
+      </div>
+    }
+  </section>
+</div>
+
+<div class="status-row xi-row">
+  <section class="section-card compact-section">
+    <h2>Team of the week</h2>
+    @if (totw(); as xi) {
+      <p class="section-desc">Best legal XI for GW{{ xi.gameweek }} · {{ xi.formation }} · {{ xi.total_points }} pts</p>
+      <div class="xi-pitch" aria-label="Team of the week">
+        @for (row of xiRows(xi); track $index) {
+          <div class="xi-line">
+            @for (p of row; track p.player_id) {
+              <div class="xi-chip" [matTooltip]="p.full_name || p.web_name">
+                <app-club-mark
+                  [team]="p.team"
+                  [fullName]="p.team_name"
+                  [teamCode]="p.team_code"
+                  [size]="18"
+                  [showName]="false"
+                />
+                <strong>{{ p.web_name }}</strong>
+                <span>{{ p.points }}</span>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    } @else if (loadingDash()) {
+      <mat-spinner diameter="28" />
+    } @else {
+      <p class="empty">Team of the week is not available yet.</p>
+    }
+  </section>
+
+  <section class="section-card compact-section">
+    <h2>Team of the season</h2>
+    @if (tots(); as xi) {
+      <p class="section-desc">Highest-scoring legal XI through GW{{ xi.gameweek }} · {{ xi.formation }} · {{ xi.total_points }} pts</p>
+      <div class="xi-pitch" aria-label="Team of the season">
+        @for (row of xiRows(xi); track $index) {
+          <div class="xi-line">
+            @for (p of row; track p.player_id) {
+              <div class="xi-chip" [matTooltip]="p.full_name || p.web_name">
+                <app-club-mark
+                  [team]="p.team"
+                  [fullName]="p.team_name"
+                  [teamCode]="p.team_code"
+                  [size]="18"
+                  [showName]="false"
+                />
+                <strong>{{ p.web_name }}</strong>
+                <span>{{ p.points }}</span>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    } @else if (loadingDash()) {
+      <mat-spinner diameter="28" />
+    } @else {
+      <p class="empty">Team of the season is not available yet.</p>
+    }
+  </section>
 </div>
 
 @if (loadingDash() && !dashboard()) {
   <mat-spinner diameter="40" />
 } @else if (dashboard()) {
-  @let dash = dashboard()!;
-  <section class="section-card">
-    <h2>Best of GW{{ dash.last_gameweek }}</h2>
-    <p class="section-desc">Top performers from the referenced completed gameweek.</p>
-    <div class="table-wrap">
-    <table mat-table [dataSource]="dash.top_last_gameweek" class="pred-table">
-      <ng-container matColumnDef="player">
-        <th mat-header-cell *matHeaderCellDef>Player</th>
-        <td mat-cell *matCellDef="let row">{{ row.web_name }} ({{ row.position }})</td>
-      </ng-container>
-      <ng-container matColumnDef="team">
-        <th mat-header-cell *matHeaderCellDef>Team</th>
-        <td mat-cell *matCellDef="let row">
-          <app-club-mark [team]="row.team" [fullName]="row.team_name" [teamCode]="row.team_code" />
-        </td>
-      </ng-container>
-      <ng-container matColumnDef="pts">
-        <th mat-header-cell *matHeaderCellDef>Pts</th>
-        <td mat-cell *matCellDef="let row"><strong>{{ row.total_points }}</strong></td>
-      </ng-container>
-      <ng-container matColumnDef="returns">
-        <th mat-header-cell *matHeaderCellDef>Returns</th>
-        <td mat-cell *matCellDef="let row">{{ row.goals }}G {{ row.assists }}A · {{ row.bonus }} bonus</td>
-      </ng-container>
-      <tr mat-header-row *matHeaderRowDef="topGwColumns"></tr>
-      <tr mat-row *matRowDef="let row; columns: topGwColumns"></tr>
-    </table>
+  <section class="section-card potw-section">
+    <div class="potw-head">
+      <div>
+        <h2>{{ seasonLabel() }} Player of the Week</h2>
+        <p class="section-desc">Highest scorer in each gameweek. Empty slots are still to play.</p>
+      </div>
+      <div class="potw-nav">
+        <button type="button" class="potw-btn" (click)="scrollPotw(-1)" aria-label="Previous gameweeks">‹</button>
+        <button type="button" class="potw-btn" (click)="scrollPotw(1)" aria-label="Next gameweeks">›</button>
+      </div>
+    </div>
+    <div class="potw-strip" #potwStrip>
+      @for (row of playersOfTheWeek(); track row.gameweek_number) {
+        <article class="potw-card" [class.empty]="!row.web_name">
+          <div class="potw-figure">
+            <span class="potw-silhouette" aria-hidden="true"></span>
+            @if (shirtUrl(row); as src) {
+              <img class="potw-shirt" [src]="src" alt="" (error)="onShirtError($event)" />
+            }
+          </div>
+          <strong [matTooltip]="row.full_name || ''">{{ row.web_name || '—' }}</strong>
+          <div class="potw-meta">
+            <span>GW{{ row.gameweek_number }}</span>
+            <span>
+              @if (row.total_points != null) {
+                {{ row.total_points }} pts
+              } @else {
+                —
+              }
+            </span>
+          </div>
+        </article>
+      }
     </div>
   </section>
 }
@@ -43,8 +216,8 @@
 
 <section class="section-card">
   <h2>Season player statistics</h2>
-  <p class="section-desc">Cumulative stats up to the selected gameweek.</p>
-  <div class="section-controls filter-pair">
+  <p class="section-desc">Cumulative stats up to the selected gameweek. Click a column to sort.</p>
+  <div class="section-controls filter-pair stats-filters">
     <mat-form-field appearance="outline">
       <mat-label>Position</mat-label>
       <mat-select [value]="statsPosition()" (valueChange)="onStatsPosition($event)">
@@ -64,47 +237,160 @@
         <mat-option [value]="450">450+</mat-option>
       </mat-select>
     </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Team</mat-label>
+      <mat-select [value]="statsTeam()" (valueChange)="onStatsTeam($event)">
+        <mat-option value="">All</mat-option>
+        @for (team of statsTeams(); track team) {
+          <mat-option [value]="team">{{ team }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Min £</mat-label>
+      <mat-select [value]="minPrice()" (valueChange)="onMinPrice($event)">
+        <mat-option [value]="null">Any</mat-option>
+        @for (price of priceOptions; track price) {
+          <mat-option [value]="price">{{ price | number: '1.1-1' }}m</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Max £</mat-label>
+      <mat-select [value]="maxPrice()" (valueChange)="onMaxPrice($event)">
+        <mat-option [value]="null">Any</mat-option>
+        @for (price of priceOptions; track price) {
+          <mat-option [value]="price">{{ price | number: '1.1-1' }}m</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="search-field">
+      <mat-label>Search player</mat-label>
+      <input matInput [value]="statsQuery()" (input)="onStatsQuery($any($event.target).value)" />
+    </mat-form-field>
   </div>
   @if (loadingStats()) {
     <mat-spinner diameter="36" />
-  } @else if (seasonStats().length === 0) {
+  } @else if (displayedStats().length === 0) {
     <p class="empty">No player stats for these filters.</p>
   } @else {
-    <div class="table-wrap">
-    <table mat-table [dataSource]="seasonStats()" class="pred-table">
+    <div class="table-wrap season-wrap">
+    <table
+      mat-table
+      [dataSource]="displayedStats()"
+      matSort
+      (matSortChange)="onStatsSort($event)"
+      class="pred-table season-stats-table"
+    >
       <ng-container matColumnDef="player">
-        <th mat-header-cell *matHeaderCellDef>Player</th>
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="player">Player</th>
         <td mat-cell *matCellDef="let row" [matTooltip]="row.full_name">{{ row.web_name }}</td>
       </ng-container>
       <ng-container matColumnDef="team">
-        <th mat-header-cell *matHeaderCellDef>Team</th>
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="team">Team</th>
         <td mat-cell *matCellDef="let row">
           <app-club-mark [team]="row.team" [fullName]="row.team_name" [teamCode]="row.team_code" />
         </td>
       </ng-container>
+      <ng-container matColumnDef="pos">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="pos">Pos</th>
+        <td mat-cell *matCellDef="let row">{{ row.position }}</td>
+      </ng-container>
+      <ng-container matColumnDef="price">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="price">£</th>
+        <td mat-cell *matCellDef="let row">{{ row.price | number: '1.1-1' }}m</td>
+      </ng-container>
       <ng-container matColumnDef="pts">
-        <th mat-header-cell *matHeaderCellDef>Pts</th>
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="pts">Pts</th>
         <td mat-cell *matCellDef="let row">{{ row.total_points }}</td>
       </ng-container>
+      <ng-container matColumnDef="starts">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="starts" matTooltip="Starts">Start</th>
+        <td mat-cell *matCellDef="let row">{{ row.starts ?? 0 }}</td>
+      </ng-container>
+      <ng-container matColumnDef="subbed">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="subbed" matTooltip="Subbed on">Sub</th>
+        <td mat-cell *matCellDef="let row">{{ row.subbed_in ?? 0 }}</td>
+      </ng-container>
+      <ng-container matColumnDef="cs">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="cs" matTooltip="Clean sheets">CS</th>
+        <td mat-cell *matCellDef="let row">{{ row.clean_sheets ?? 0 }}</td>
+      </ng-container>
+      <ng-container matColumnDef="gc">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="gc" matTooltip="Goals conceded">GC</th>
+        <td mat-cell *matCellDef="let row">{{ row.goals_conceded ?? 0 }}</td>
+      </ng-container>
+      <ng-container matColumnDef="cbitr">
+        <th
+          mat-header-cell
+          *matHeaderCellDef
+          mat-sort-header="cbitr"
+          matTooltip="Clearances+blocks+interceptions / tackles / recoveries"
+        >
+          CBI / T / R
+        </th>
+        <td mat-cell *matCellDef="let row">
+          {{ row.clearances_blocks_interceptions ?? 0 }} /
+          {{ row.tackles ?? 0 }} /
+          {{ row.recoveries ?? 0 }}
+        </td>
+      </ng-container>
+      <ng-container matColumnDef="defcon">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="defcon" matTooltip="Defensive contribution points">DefCon</th>
+        <td mat-cell *matCellDef="let row">{{ row.defensive_contribution ?? 0 }}</td>
+      </ng-container>
+      <ng-container matColumnDef="form">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="form">Form</th>
+        <td mat-cell *matCellDef="let row">{{ row.form == null ? '—' : (row.form | number: '1.1-1') }}</td>
+      </ng-container>
+      <ng-container matColumnDef="selected">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="selected">Sel %</th>
+        <td mat-cell *matCellDef="let row">{{ row.selected_by_percent | number: '1.1-1' }}%</td>
+      </ng-container>
       <ng-container matColumnDef="goals">
-        <th mat-header-cell *matHeaderCellDef>G</th>
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="goals">G</th>
         <td mat-cell *matCellDef="let row">{{ row.goals }}</td>
       </ng-container>
       <ng-container matColumnDef="assists">
-        <th mat-header-cell *matHeaderCellDef>A</th>
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="assists">A</th>
         <td mat-cell *matCellDef="let row">{{ row.assists }}</td>
       </ng-container>
       <ng-container matColumnDef="mins">
-        <th mat-header-cell *matHeaderCellDef>Min</th>
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="mins">Min</th>
         <td mat-cell *matCellDef="let row">{{ row.minutes }}</td>
       </ng-container>
-      <ng-container matColumnDef="price">
-        <th mat-header-cell *matHeaderCellDef>£</th>
-        <td mat-cell *matCellDef="let row">{{ row.price | number: '1.1-1' }}m</td>
+      <ng-container matColumnDef="xg">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="xg">xG</th>
+        <td mat-cell *matCellDef="let row">{{ row.expected_goals | number: '1.1-1' }}</td>
+      </ng-container>
+      <ng-container matColumnDef="xa">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="xa">xA</th>
+        <td mat-cell *matCellDef="let row">{{ row.expected_assists | number: '1.1-1' }}</td>
+      </ng-container>
+      <ng-container matColumnDef="xgc">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="xgc">xGC</th>
+        <td mat-cell *matCellDef="let row">{{ (row.expected_goals_conceded ?? 0) | number: '1.1-1' }}</td>
+      </ng-container>
+      <ng-container matColumnDef="ict">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="ict">ICT</th>
+        <td mat-cell *matCellDef="let row">{{ (row.ict_index ?? 0) | number: '1.1-1' }}</td>
+      </ng-container>
+      <ng-container matColumnDef="net">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="net" matTooltip="Net transfers this gameweek">Net</th>
+        <td mat-cell *matCellDef="let row">{{ row.net_transfers ?? 0 }}</td>
       </ng-container>
       <tr mat-header-row *matHeaderRowDef="statsColumns"></tr>
       <tr mat-row *matRowDef="let row; columns: statsColumns"></tr>
     </table>
     </div>
+    <mat-paginator
+      [length]="statsTotal()"
+      [pageIndex]="statsPageIndex()"
+      [pageSize]="statsPageSize()"
+      [pageSizeOptions]="pageSizeOptions"
+      (page)="onStatsPage($event)"
+      showFirstLastButtons
+      aria-label="Season player statistics pages"
+    />
   }
 </section>

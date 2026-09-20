@@ -56,8 +56,8 @@
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--fpl-accent);
-  background: rgba(0, 255, 135, 0.12);
-  border: 1px solid rgba(0, 255, 135, 0.25);
+  background: var(--fpl-accent-soft);
+  border: 1px solid color-mix(in srgb, var(--fpl-accent) 35%, transparent);
   border-radius: 999px;
   padding: 0.1rem 0.55rem;
 }
@@ -83,14 +83,42 @@
 }
 
 .plan-list li {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  animation: chip-in 200ms ease;
+}
+
+@keyframes chip-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.plan-box {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 0.45rem 0.65rem;
   align-items: start;
+  width: 100%;
   padding: 0.85rem 0.95rem;
   border-radius: 12px;
   background: var(--fpl-surface-3);
   border: 1px solid var(--fpl-border);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 200ms ease,
+    box-shadow 200ms ease,
+    transform 200ms ease,
+    background 200ms ease;
 
   .chip-tag {
     justify-self: start;
@@ -107,6 +135,12 @@
     font-size: 0.88rem;
     line-height: 1.45;
   }
+
+  &.selected {
+    border-color: color-mix(in srgb, var(--fpl-accent) 55%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--fpl-accent) 35%, transparent);
+    transform: translateY(-1px);
+  }
 }
 
 .gw-badge {
@@ -116,8 +150,8 @@
   min-width: 3.4rem;
   padding: 0.25rem 0.45rem;
   border-radius: 8px;
-  background: rgba(124, 92, 255, 0.2);
-  color: #c4b5fd;
+  background: var(--fpl-gw-badge-bg);
+  color: var(--fpl-gw-badge-fg);
   font-weight: 700;
   font-size: 0.82rem;
 }
@@ -134,23 +168,23 @@
 }
 
 .chip-wildcard {
-  background: rgba(124, 92, 255, 0.22);
-  color: #d4c6ff;
+  background: var(--fpl-chip-wc-bg);
+  color: var(--fpl-chip-wc-fg);
 }
 
 .chip-bench_boost {
-  background: rgba(0, 255, 135, 0.16);
-  color: #b8ffe0;
+  background: var(--fpl-chip-bb-bg);
+  color: var(--fpl-chip-bb-fg);
 }
 
 .chip-triple_captain {
-  background: rgba(250, 204, 21, 0.18);
-  color: #fde68a;
+  background: var(--fpl-chip-tc-bg);
+  color: var(--fpl-chip-tc-fg);
 }
 
 .chip-free_hit {
-  background: rgba(56, 189, 248, 0.18);
-  color: #bae6fd;
+  background: var(--fpl-chip-fh-bg);
+  color: var(--fpl-chip-fh-fg);
 }
 
 .player-line {
@@ -216,7 +250,7 @@
   div {
     padding: 0.4rem 0.5rem;
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--fpl-row-hover);
     border: 1px solid var(--fpl-border);
   }
 
@@ -237,7 +271,7 @@
 }
 
 .tc-xp {
-  color: #fde68a;
+  color: var(--fpl-chip-tc-fg);
 }
 
 .tc-reason {
@@ -290,7 +324,7 @@
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--fpl-row-hover);
   color: var(--fpl-muted);
 }
 
@@ -312,8 +346,18 @@
   color: var(--fpl-danger);
 }
 
-.muted {
-  color: var(--fpl-muted);
+.pick-hint {
+  margin-top: 0.5rem;
+}
+
+.chip-detail {
+  animation: chip-in 220ms ease;
+}
+
+.chip-detail h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
 }
 
 @media (max-width: 1180px) {
@@ -350,7 +394,7 @@
     padding: 0.75rem 0.7rem;
   }
 
-  .plan-list li {
+  .plan-box {
     gap: 0.55rem;
     padding: 0.75rem 0.8rem;
   }

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from fpl_etl.defcon_fields import defcon_stat_fields
+from fpl_etl.gw_stat_fields import extra_gw_stat_fields
 from fpl_shared.fpl_client import FplClient
 from fpl_shared.models import Gameweek, Player, PlayerGameweekStat, Season
 
@@ -53,6 +55,8 @@ def sync_current_season_player_gw_stats(db: Session) -> int:
                     "ict_index": float(stats.get("ict_index", 0) or 0),
                     "expected_goals": float(stats.get("expected_goals", 0) or 0),
                     "expected_assists": float(stats.get("expected_assists", 0) or 0),
+                    **defcon_stat_fields(stats if isinstance(stats, dict) else row),
+                    **extra_gw_stat_fields(stats if isinstance(stats, dict) else row),
                 }
                 current = existing.get((player.fpl_element_id, gw.number))
                 if current:

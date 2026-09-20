@@ -24,6 +24,16 @@ export class GameweekStore {
     return open?.number ?? list[list.length - 1]?.number ?? 1;
   });
 
+  readonly headerGameweek = computed(() => {
+    const list = this.gameweeks();
+    return (
+      list.find((g) => g.is_next) ??
+      list.find((g) => g.is_current) ??
+      list.find((g) => !g.finished) ??
+      null
+    );
+  });
+
   load(): void {
     this.loading.set(true);
     this.api.getGameweeks().subscribe({

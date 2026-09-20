@@ -4,11 +4,19 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime
+from types import SimpleNamespace
 
 from sqlalchemy.orm import Session
 
 from sklearn.linear_model import LogisticRegression
 
+from fpl_ml.defcon import (
+    blend_hit_probability,
+    cached_defcon_model,
+    defcon_threshold,
+    predicted_defcon_actions,
+    feature_row,
+)
 from fpl_ml.difficulty_scale import (
     FDR_SCALE_WINDOW,
     blend_with_fpl_fdr,
@@ -58,6 +66,85 @@ def _current_season(db: Session) -> Season | None:
 
 def _team_map(db: Session, season_id: int) -> dict[int, Team]:
     return {t.id: t for t in db.query(Team).filter(Team.season_id == season_id).all()}
+
+
+def opponent_labels(fixtures: list[Fixture], team_id: int, teams: dict[int, Team]) -> str:
+    parts: list[str] = []
+    for fx in fixtures:
+        is_home = fx.home_team_id == team_id
+        opp = teams.get(fx.away_team_id if is_home else fx.home_team_id)
+        short = opp.short_name if opp else "?"
+        parts.append(f"{short} ({'H' if is_home else 'A'})")
+    return ", ".join(parts) if parts else "Blank"
+
+
+def opponent_summary(
+    fixtures: list[Fixture], team_id: int, teams: dict[int, Team]
+) -> dict:
+    labels = opponent_labels(fixtures, team_id, teams)
+    n = len(fixtures)
+    is_home: bool | None = None
+    if n == 1:
+        is_home = fixtures[0].home_team_id == team_id
+    return {"opponents": labels, "n_fixtures": n, "is_home": is_home}
+
+
+def fixtures_by_team(
+    fixtures: list[Fixture],
+) -> dict[int, list[Fixture]]:
+    by_team: dict[int, list[Fixture]] = defaultdict(list)
+    for fx in fixtures:
+        by_team[fx.home_team_id].append(fx)
+        by_team[fx.away_team_id].append(fx)
+    return by_team
+
+
+def empty_season_bucket() -> dict:
+    return {
+        "minutes": 0,
+        "points": 0,
+        "goals": 0,
+        "assists": 0,
+        "bonus": 0,
+        "bps": 0,
+        "xg": 0.0,
+        "xa": 0.0,
+        "xgc": 0.0,
+        "gws": 0,
+        "starts": 0,
+        "subbed_in": 0,
+        "clean_sheets": 0,
+        "goals_conceded": 0,
+        "ict_index": 0.0,
+        "cbi": 0,
+        "tackles": 0,
+        "recoveries": 0,
+        "defcon": 0,
+    }
+
+
+def add_gw_to_season(bucket: dict, stat: PlayerGameweekStat) -> None:
+    bucket["minutes"] += stat.minutes
+    bucket["points"] += stat.total_points
+    bucket["goals"] += stat.goals_scored
+    bucket["assists"] += stat.assists
+    bucket["bonus"] += stat.bonus
+    bucket["bps"] += stat.bps
+    bucket["xg"] += stat.expected_goals
+    bucket["xa"] += stat.expected_assists
+    bucket["xgc"] += float(getattr(stat, "expected_goals_conceded", 0) or 0)
+    bucket["gws"] += 1
+    starts = int(getattr(stat, "starts", 0) or 0)
+    bucket["starts"] += starts
+    if stat.minutes > 0 and starts == 0:
+        bucket["subbed_in"] += 1
+    bucket["clean_sheets"] += stat.clean_sheets
+    bucket["goals_conceded"] += stat.goals_conceded
+    bucket["ict_index"] += float(stat.ict_index or 0)
+    bucket["cbi"] += int(getattr(stat, "clearances_blocks_interceptions", 0) or 0)
+    bucket["tackles"] += int(getattr(stat, "tackles", 0) or 0)
+    bucket["recoveries"] += int(getattr(stat, "recoveries", 0) or 0)
+    bucket["defcon"] += int(getattr(stat, "defensive_contribution", 0) or 0)
 
 
 _cs_model_by_season: dict[int, LogisticRegression | None] = {}
@@ -515,13 +602,13 @@ def captain_picks(db: Session, gameweek: int, limit: int = 15) -> list[dict]:
 
 
 def defensive_contribution_outlook(db: Session, gameweek: int, limit: int = 20) -> list[dict]:
-    """Estimate likelihood of hitting FPL defensive contribution thresholds (no raw CBIT in DB)."""
+    """P(hit position-specific CBIT/CBIRT threshold) × 2 expected DefCon points."""
     season = _current_season(db)
     if not season:
         return []
     players = (
         db.query(Player)
-        .filter(Player.season_id == season.id, Player.position.in_(["DEF", "MID"]))
+        .filter(Player.season_id == season.id, Player.position.in_(["DEF", "MID", "FWD"]))
         .all()
     )
     if not players:
@@ -544,22 +631,33 @@ def defensive_contribution_outlook(db: Session, gameweek: int, limit: int = 20) 
     team_ids = {p.team_id for p in players if p.team_id}
     teams = {t.id: t for t in db.query(Team).filter(Team.id.in_(team_ids)).all()}
     cs_rows = {r["team_id"]: r["avg_clean_sheet_prob"] for r in team_clean_sheet_outlook(db, gameweek, 1)}
+    fixtures = (
+        db.query(Fixture)
+        .filter(Fixture.season_id == season.id, Fixture.gameweek_number == gameweek)
+        .all()
+    )
+    n_by_team: dict[int, int] = defaultdict(int)
+    for fx in fixtures:
+        n_by_team[fx.home_team_id] += 1
+        n_by_team[fx.away_team_id] += 1
+
+    positions = {pl.id: pl.position for pl in players}
+    logistic = cached_defcon_model(season.id, by_player, positions)
 
     rows: list[dict] = []
     for pl in players:
         history = sorted(by_player.get(pl.id, []), key=lambda x: x.gameweek_number)
-        if not history:
-            continue
-        last3 = history[-3:]
-        avg_min = sum(x.minutes for x in last3) / len(last3)
-        if avg_min < 45:
-            continue
-        threshold = 10 if pl.position == "DEF" else 12
-        minutes_factor = min(1.0, avg_min / 90.0)
-        ict_factor = min(1.0, sum(x.ict_index for x in last3) / len(last3) / 30.0)
         team_cs = cs_rows.get(pl.team_id or 0, 0.15)
-        pos_boost = 0.15 if pl.position == "DEF" else 0.05
-        likelihood = min(0.95, minutes_factor * 0.55 + ict_factor * 0.25 + team_cs * 0.15 + pos_boost)
+        features = feature_row(history, pl.position, team_cs=team_cs)
+        if not features:
+            continue
+        likelihood = blend_hit_probability(features, pl.position, logistic)
+        n_matches = n_by_team.get(pl.team_id or 0, 0)
+        if fixtures:
+            if n_matches == 0:
+                continue
+        else:
+            n_matches = 1
         team = teams.get(pl.team_id) if pl.team_id else None
         rows.append(
             {
@@ -568,12 +666,15 @@ def defensive_contribution_outlook(db: Session, gameweek: int, limit: int = 20) 
                 "full_name": _full_name(pl),
                 **_team_display(team),
                 "position": pl.position,
-                "threshold": threshold,
+                "threshold": defcon_threshold(pl.position),
                 "likelihood": round(likelihood, 3),
-                "avg_minutes_last3": round(avg_min, 1),
+                "predicted_defcons": round(predicted_defcon_actions(features), 1),
+                "avg_minutes_last3": round(features["avg_minutes_last3"], 1),
+                "avg_actions_last3": round(features["roll3_actions"], 1),
+                "n_matches": n_matches,
             }
         )
-    rows.sort(key=lambda r: -r["likelihood"])
+    rows.sort(key=lambda r: (-r["predicted_defcons"], -r["likelihood"], -r["avg_actions_last3"]))
     return rows[:limit]
 
 
@@ -632,9 +733,178 @@ def bonus_points_outlook(db: Session, gameweek: int, limit: int = 20) -> list[di
     return rows[:limit]
 
 
+XI_SHAPES: tuple[tuple[int, int, int, int], ...] = (
+    (1, 5, 4, 1),
+    (1, 5, 3, 2),
+    (1, 4, 5, 1),
+    (1, 4, 4, 2),
+    (1, 4, 3, 3),
+    (1, 3, 5, 2),
+    (1, 3, 4, 3),
+)
+POS_ORDER = {"GK": 0, "DEF": 1, "MID": 2, "FWD": 3}
+
+
+def _formation_label(players: list[dict]) -> str:
+    n_def = sum(1 for p in players if p.get("position") == "DEF")
+    n_mid = sum(1 for p in players if p.get("position") == "MID")
+    n_fwd = sum(1 for p in players if p.get("position") == "FWD")
+    return f"{n_def}-{n_mid}-{n_fwd}"
+
+
+def select_best_xi(players: list[dict], points_key: str = "points") -> tuple[list[dict], str, int]:
+    """Highest-scoring legal FPL XI (1 GK, 3-5 DEF, 2-5 MID, 1-3 FWD, max 3 per club)."""
+    by_pos: dict[str, list[dict]] = {"GK": [], "DEF": [], "MID": [], "FWD": []}
+    for player in players:
+        pos = player.get("position")
+        if pos in by_pos:
+            by_pos[pos].append(player)
+    for rows in by_pos.values():
+        rows.sort(key=lambda row: (-int(row.get(points_key) or 0), row.get("player_id") or 0))
+
+    best: list[dict] = []
+    best_score = -1
+    for n_gk, n_def, n_mid, n_fwd in XI_SHAPES:
+        picked: list[dict] = []
+        team_counts: dict[int, int] = defaultdict(int)
+        needed = {"GK": n_gk, "DEF": n_def, "MID": n_mid, "FWD": n_fwd}
+        valid = True
+        for pos, count in needed.items():
+            got = 0
+            for player in by_pos[pos]:
+                team_id = player.get("team_id")
+                if team_id is not None and team_counts[int(team_id)] >= 3:
+                    continue
+                picked.append(player)
+                if team_id is not None:
+                    team_counts[int(team_id)] += 1
+                got += 1
+                if got == count:
+                    break
+            if got < count:
+                valid = False
+                break
+        if not valid:
+            continue
+        score = sum(int(p.get(points_key) or 0) for p in picked)
+        if score > best_score:
+            best = picked
+            best_score = score
+    best.sort(
+        key=lambda row: (POS_ORDER.get(row.get("position") or "", 9), -(int(row.get(points_key) or 0)))
+    )
+    return best, _formation_label(best), max(best_score, 0)
+
+
+def _xi_from_player(pl: Player, teams: dict[int, Team], points: int) -> dict:
+    team = teams.get(pl.team_id) if pl.team_id else None
+    return {
+        "player_id": pl.id,
+        "web_name": pl.web_name,
+        "full_name": _full_name(pl),
+        **_team_display(team),
+        "position": pl.position,
+        "points": int(points),
+        "team_id": pl.team_id,
+    }
+
+
+def _public_xi(gameweek: int, players: list[dict]) -> dict | None:
+    if len(players) < 11:
+        return None
+    total = sum(int(p.get("points") or 0) for p in players)
+    return {
+        "gameweek": gameweek,
+        "formation": _formation_label(players),
+        "total_points": total,
+        "players": [{k: v for k, v in p.items() if k != "team_id"} for p in players],
+    }
+
+
+def _xi_from_gw_stats(
+    db: Session,
+    season_id: int,
+    gw: int,
+    players_by_id: dict[int, Player],
+    players_by_fpl: dict[int, Player],
+    teams: dict[int, Team],
+) -> dict | None:
+    stats = (
+        db.query(PlayerGameweekStat)
+        .filter(
+            PlayerGameweekStat.season_id == season_id,
+            PlayerGameweekStat.gameweek_number == gw,
+        )
+        .all()
+    )
+    candidates: list[dict] = []
+    for stat in stats:
+        pl = players_by_id.get(stat.player_id) if stat.player_id else None
+        if pl is None and stat.fpl_element_id:
+            pl = players_by_fpl.get(stat.fpl_element_id)
+        if not pl:
+            continue
+        candidates.append(_xi_from_player(pl, teams, stat.total_points))
+    picked, _formation, _total = select_best_xi(candidates)
+    return _public_xi(gw, picked)
+
+
+def _xi_from_season_stats(
+    db: Session,
+    season_id: int,
+    through_gw: int,
+    players_by_id: dict[int, Player],
+    players_by_fpl: dict[int, Player],
+    teams: dict[int, Team],
+) -> dict | None:
+    stats = (
+        db.query(PlayerGameweekStat)
+        .filter(
+            PlayerGameweekStat.season_id == season_id,
+            PlayerGameweekStat.gameweek_number <= through_gw,
+        )
+        .all()
+    )
+    totals: dict[int, dict] = {}
+    for stat in stats:
+        pl = players_by_id.get(stat.player_id) if stat.player_id else None
+        if pl is None and stat.fpl_element_id:
+            pl = players_by_fpl.get(stat.fpl_element_id)
+        if not pl:
+            continue
+        bucket = totals.get(pl.id)
+        if bucket is None:
+            bucket = _xi_from_player(pl, teams, 0)
+            totals[pl.id] = bucket
+        bucket["points"] = int(bucket["points"]) + int(stat.total_points or 0)
+    picked, _formation, _total = select_best_xi(list(totals.values()))
+    return _public_xi(through_gw, picked)
+
+
+def season_display_label(code: str) -> str:
+    return (code or "").replace("-", "/")
+
+
+def pick_best_stat_by_gameweek(stats: list) -> dict[int, object]:
+    best: dict[int, object] = {}
+    for stat in stats:
+        current = best.get(stat.gameweek_number)
+        if current is None:
+            best[stat.gameweek_number] = stat
+            continue
+        current_points = getattr(current, "total_points", 0)
+        current_id = getattr(current, "player_id", 0) or 0
+        better_points = stat.total_points > current_points
+        same_points_earlier_id = stat.total_points == current_points and (stat.player_id or 0) < current_id
+        if better_points or same_points_earlier_id:
+            best[stat.gameweek_number] = stat
+    return best
+
+
 def home_dashboard(db: Session, gameweek: int | None) -> dict:
     empty = {
         "last_gameweek": 0,
+        "season_label": "",
         "price_risers": [],
         "price_fallers": [],
         "transfers_in": [],
@@ -644,6 +914,9 @@ def home_dashboard(db: Session, gameweek: int | None) -> dict:
         "transfers_in_all_time": [],
         "transfers_out_all_time": [],
         "top_last_gameweek": [],
+        "players_of_the_week": [],
+        "team_of_the_week": None,
+        "team_of_the_season": None,
     }
     season = _current_season(db)
     if not season:
@@ -709,47 +982,62 @@ def home_dashboard(db: Session, gameweek: int | None) -> dict:
         if requested and requested.finished:
             last_gw = gameweek
 
+    players_by_id = {p.id: p for p in players}
+    players_by_fpl = {p.fpl_element_id: p for p in players if p.fpl_element_id}
     top_stats = (
         db.query(PlayerGameweekStat)
-        .filter(
-            PlayerGameweekStat.season_id == season.id,
-            PlayerGameweekStat.gameweek_number == last_gw,
-        )
-        .order_by(PlayerGameweekStat.total_points.desc())
-        .limit(15)
+        .filter(PlayerGameweekStat.season_id == season.id)
         .all()
     )
-    top_last: list[dict] = []
-    for s in top_stats:
-        pl = db.query(Player).filter(Player.id == s.player_id).first() if s.player_id else None
-        if not pl and s.fpl_element_id:
-            pl = (
-                db.query(Player)
-                .filter(
-                    Player.season_id == season.id,
-                    Player.fpl_element_id == s.fpl_element_id,
+    best_by_gw = pick_best_stat_by_gameweek(top_stats)
+    gw_rows = (
+        db.query(Gameweek)
+        .filter(Gameweek.season_id == season.id)
+        .order_by(Gameweek.number)
+        .all()
+    )
+    if not gw_rows:
+        gw_rows = [SimpleNamespace(number=n) for n in range(1, 39)]
+
+    players_of_the_week: list[dict] = []
+    for gw_row in gw_rows:
+        slot = {
+            "gameweek_number": gw_row.number,
+            "player_id": None,
+            "web_name": None,
+            "full_name": None,
+            "team": "",
+            "team_name": None,
+            "team_code": None,
+            "position": None,
+            "total_points": None,
+        }
+        stat = best_by_gw.get(gw_row.number)
+        if stat is not None:
+            pl = players_by_id.get(stat.player_id) if getattr(stat, "player_id", None) else None
+            if pl is None and getattr(stat, "fpl_element_id", None):
+                pl = players_by_fpl.get(stat.fpl_element_id)
+            if pl:
+                team = teams.get(pl.team_id) if pl.team_id else None
+                slot.update(
+                    {
+                        "player_id": pl.id,
+                        "web_name": pl.web_name,
+                        "full_name": _full_name(pl),
+                        **_team_display(team),
+                        "position": pl.position,
+                        "total_points": stat.total_points,
+                    }
                 )
-                .first()
-            )
-        if not pl:
-            continue
-        team = teams.get(pl.team_id) if pl.team_id else None
-        top_last.append(
-            {
-                "player_id": pl.id,
-                "web_name": pl.web_name,
-                **_team_display(team),
-                "position": pl.position,
-                "gameweek_number": last_gw,
-                "total_points": s.total_points,
-                "goals": s.goals_scored,
-                "assists": s.assists,
-                "bonus": s.bonus,
-            }
-        )
+        players_of_the_week.append(slot)
+
+    totw = _xi_from_gw_stats(db, season.id, last_gw, players_by_id, players_by_fpl, teams)
+    through_gw = gameweek if gameweek is not None else last_gw
+    tots = _xi_from_season_stats(db, season.id, through_gw, players_by_id, players_by_fpl, teams)
 
     return {
         "last_gameweek": last_gw,
+        "season_label": season_display_label(season.code),
         "price_risers": [_player_brief(p) for p in risers],
         "price_fallers": [_player_brief(p) for p in fallers],
         "transfers_in": [_player_brief(p) for p in transfers_in],
@@ -758,7 +1046,10 @@ def home_dashboard(db: Session, gameweek: int | None) -> dict:
         "price_fallers_all_time": [_player_brief(p) for p in fallers_all],
         "transfers_in_all_time": [_player_brief(p) for p in transfers_in_all],
         "transfers_out_all_time": [_player_brief(p) for p in transfers_out_all],
-        "top_last_gameweek": top_last,
+        "top_last_gameweek": [],
+        "players_of_the_week": players_of_the_week,
+        "team_of_the_week": totw,
+        "team_of_the_season": tots,
     }
 
 
@@ -783,33 +1074,12 @@ def player_season_stats(
     if gameweek is not None:
         stats_q = stats_q.filter(PlayerGameweekStat.gameweek_number <= gameweek)
     stats = stats_q.all()
-    agg: dict[int, dict] = defaultdict(
-        lambda: {
-            "minutes": 0,
-            "points": 0,
-            "goals": 0,
-            "assists": 0,
-            "bonus": 0,
-            "bps": 0,
-            "xg": 0.0,
-            "xa": 0.0,
-            "gws": 0,
-        }
-    )
+    agg: dict[int, dict] = defaultdict(empty_season_bucket)
     for s in stats:
         pid = s.player_id
         if not pid:
             continue
-        bucket = agg[pid]
-        bucket["minutes"] += s.minutes
-        bucket["points"] += s.total_points
-        bucket["goals"] += s.goals_scored
-        bucket["assists"] += s.assists
-        bucket["bonus"] += s.bonus
-        bucket["bps"] += s.bps
-        bucket["xg"] += s.expected_goals
-        bucket["xa"] += s.expected_assists
-        bucket["gws"] += 1
+        add_gw_to_season(agg[pid], s)
 
     team_ids = {p.team_id for p in players if p.team_id}
     teams = {t.id: t for t in db.query(Team).filter(Team.id.in_(team_ids)).all()}
@@ -835,7 +1105,20 @@ def player_season_stats(
                 "bps": a["bps"],
                 "expected_goals": round(a["xg"], 2),
                 "expected_assists": round(a["xa"], 2),
+                "expected_goals_conceded": round(a["xgc"], 2),
                 "gameweeks_played": a["gws"],
+                "starts": a["starts"],
+                "subbed_in": a["subbed_in"],
+                "clean_sheets": a["clean_sheets"],
+                "goals_conceded": a["goals_conceded"],
+                "ict_index": round(a["ict_index"], 1),
+                "clearances_blocks_interceptions": a["cbi"],
+                "tackles": a["tackles"],
+                "recoveries": a["recoveries"],
+                "defensive_contribution": a["defcon"],
+                "form": pl.form,
+                "selected_by_percent": pl.selected_by_percent,
+                "net_transfers": (pl.transfers_in_event or 0) - (pl.transfers_out_event or 0),
             }
         )
     rows.sort(key=lambda r: -r["total_points"])

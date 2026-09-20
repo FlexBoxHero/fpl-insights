@@ -11,6 +11,8 @@ class GameweekOut(BaseModel):
     is_current: bool
     is_next: bool
     deadline_time: datetime | None = None
+    first_kickoff: datetime | None = None
+    last_kickoff: datetime | None = None
 
 
 class TeamPredictionOut(BaseModel):
@@ -42,6 +44,9 @@ class PlayerPredictionOut(BaseModel):
     expected_points: float
     baseline_last_gw: float | None
     baseline_ep_next: float | None
+    opponents: str = "Blank"
+    n_fixtures: int = 0
+    is_home: bool | None = None
 
 
 class FixtureOut(BaseModel):
@@ -136,7 +141,10 @@ class DefensiveContribOut(BaseModel):
     position: str
     threshold: int
     likelihood: float
+    predicted_defcons: float
     avg_minutes_last3: float
+    avg_actions_last3: float = 0.0
+    n_matches: int = 1
 
 
 class BonusOutlookOut(BaseModel):
@@ -184,8 +192,39 @@ class TopGwPlayerOut(BaseModel):
     bonus: int
 
 
+class PlayerOfTheWeekOut(BaseModel):
+    gameweek_number: int
+    player_id: int | None = None
+    web_name: str | None = None
+    full_name: str | None = None
+    team: str = ""
+    team_name: str | None = None
+    team_code: int | None = None
+    position: str | None = None
+    total_points: int | None = None
+
+
+class DreamXiPlayerOut(BaseModel):
+    player_id: int
+    web_name: str
+    full_name: str = ""
+    team: str
+    team_name: str | None = None
+    team_code: int | None = None
+    position: str
+    points: int
+
+
+class DreamXiOut(BaseModel):
+    gameweek: int
+    formation: str
+    total_points: int
+    players: list[DreamXiPlayerOut]
+
+
 class HomeDashboardOut(BaseModel):
     last_gameweek: int
+    season_label: str = ""
     price_risers: list[PlayerBriefOut]
     price_fallers: list[PlayerBriefOut]
     transfers_in: list[PlayerBriefOut]
@@ -195,6 +234,9 @@ class HomeDashboardOut(BaseModel):
     transfers_in_all_time: list[PlayerBriefOut]
     transfers_out_all_time: list[PlayerBriefOut]
     top_last_gameweek: list[TopGwPlayerOut]
+    players_of_the_week: list[PlayerOfTheWeekOut] = []
+    team_of_the_week: DreamXiOut | None = None
+    team_of_the_season: DreamXiOut | None = None
 
 
 class PlayerSeasonStatOut(BaseModel):
@@ -214,7 +256,20 @@ class PlayerSeasonStatOut(BaseModel):
     bps: int
     expected_goals: float
     expected_assists: float
+    expected_goals_conceded: float = 0.0
     gameweeks_played: int
+    starts: int = 0
+    subbed_in: int = 0
+    clean_sheets: int = 0
+    goals_conceded: int = 0
+    ict_index: float = 0.0
+    clearances_blocks_interceptions: int = 0
+    tackles: int = 0
+    recoveries: int = 0
+    defensive_contribution: int = 0
+    form: float | None = None
+    selected_by_percent: float = 0.0
+    net_transfers: int = 0
 
 
 class DeadlineOut(BaseModel):
@@ -329,7 +384,8 @@ class BookedRowOut(PlayerWatchBriefOut):
 
 class CaptainedRowOut(PlayerWatchBriefOut):
     badge: str
-    ownership_pct: float
+    ownership_pct: float = 0.0
+    captain_pct: float | None = None
 
 
 class PriceChangeRowOut(PlayerWatchBriefOut):
@@ -347,6 +403,8 @@ class PlayerWatchOut(BaseModel):
     injured: list[InjuryRowOut]
     booked: list[BookedRowOut]
     most_captained: list[CaptainedRowOut]
+    most_selected: list[CaptainedRowOut] = []
+    captain_sample_size: int | None = None
     price_rises: list[PriceChangeRowOut]
     price_falls: list[PriceChangeRowOut]
     price_calibrating: bool = False

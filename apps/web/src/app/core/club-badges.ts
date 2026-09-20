@@ -129,3 +129,17 @@ export function clubBadgeUrl(teamCode?: number | null, shortName?: string | null
   }
   return `https://resources.premierleague.com/premierleague/badges/70/t${code}.png`;
 }
+
+export function clubShirtUrl(
+  teamCode?: number | null,
+  shortName?: string | null,
+  isGk = false,
+): string | null {
+  const code = clubBadgeCode(teamCode, shortName);
+  if (!code) {
+    return null;
+  }
+  return isGk
+    ? `https://fantasy.premierleague.com/dist/img/shirts/standard/shirt_${code}_1-66.webp`
+    : `https://fantasy.premierleague.com/dist/img/shirts/standard/shirt_${code}-66.webp`;
+}

@@ -7,9 +7,9 @@ from fpl_shared.config import settings
 
 
 class FplClient:
-    def __init__(self, base_url: str | None = None) -> None:
+    def __init__(self, base_url: str | None = None, timeout: float = 60.0) -> None:
         self.base_url = (base_url or settings.fpl_api_base).rstrip("/")
-        self._client = httpx.Client(timeout=60.0, headers={"User-Agent": "fpl-insights/0.1"})
+        self._client = httpx.Client(timeout=timeout, headers={"User-Agent": "fpl-insights/0.1"})
 
     def close(self) -> None:
         self._client.close()
@@ -43,3 +43,12 @@ class FplClient:
 
     def entry_picks(self, entry_id: int, event: int) -> Any | None:
         return self._get_optional(f"entry/{int(entry_id)}/event/{int(event)}/picks/")
+
+    def classic_league_standings(self, league_id: int, page: int = 1) -> Any | None:
+        return self._get_optional(
+            f"leagues-classic/{int(league_id)}/standings/?page_standings={int(page)}"
+        )
+
+    def dream_team(self, event: int | None = None) -> Any | None:
+        path = f"dream-team/{int(event)}/" if event else "dream-team/"
+        return self._get_optional(path)

@@ -17,6 +17,8 @@ from fpl_etl.bulk import (
     players_by_element,
     teams_by_fpl_id,
 )
+from fpl_etl.defcon_fields import defcon_stat_fields
+from fpl_etl.gw_stat_fields import extra_gw_stat_fields
 from fpl_shared.config import settings
 from fpl_shared.models import Fixture, Gameweek, Player, Season, Team
 from fpl_shared.team_aliases import DEFAULT_ALIASES
@@ -291,6 +293,8 @@ def load_vaastav_season(db: Session, season_code: str) -> dict[str, int]:
                 "expected_goals": _safe_float(row.get("expected_goals") or row.get("xG")),
                 "expected_assists": _safe_float(row.get("expected_assists") or row.get("xA")),
                 "xP": _safe_float(row.get("xP")) if pd.notna(row.get("xP")) else None,
+                **defcon_stat_fields(row.to_dict()),
+                **extra_gw_stat_fields(row.to_dict()),
             }
         )
         seen.add(key)

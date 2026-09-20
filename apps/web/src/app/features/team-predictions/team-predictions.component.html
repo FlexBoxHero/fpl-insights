@@ -122,13 +122,19 @@
   -->
   @if (loadingCs()) {
     <mat-spinner diameter="36" />
-  } @else if (cleanSheets().length === 0) {
+  } @else if (sortedCleanSheets().length === 0) {
     <p class="empty">No clean sheet predictions for this window.</p>
   } @else {
     <div class="table-wrap">
-      <table mat-table [dataSource]="cleanSheets()" class="pred-table data-table">
+      <table
+        mat-table
+        [dataSource]="sortedCleanSheets()"
+        matSort
+        (matSortChange)="onCsSort($event)"
+        class="pred-table data-table"
+      >
         <ng-container matColumnDef="team">
-          <th mat-header-cell *matHeaderCellDef>Team</th>
+          <th mat-header-cell *matHeaderCellDef mat-sort-header="team">Team</th>
           <td mat-cell *matCellDef="let row; let i = index">
             <div class="team-cell">
               <span class="rank">{{ i + 1 }}</span>
@@ -144,7 +150,7 @@
           </td>
         </ng-container>
         <ng-container matColumnDef="overall">
-          <th mat-header-cell *matHeaderCellDef>Avg CS%</th>
+          <th mat-header-cell *matHeaderCellDef mat-sort-header="overall">Avg CS%</th>
           <td mat-cell *matCellDef="let row">{{ pct(row.avg_clean_sheet_prob) | number: '1.0-1' }}%</td>
         </ng-container>
         <ng-container matColumnDef="fixtures">
@@ -208,13 +214,19 @@
   -->
   @if (loadingGoals()) {
     <mat-spinner diameter="36" />
-  } @else if (goalsOutlook().length === 0) {
+  } @else if (sortedGoals().length === 0) {
     <p class="empty">No goal projections for this window.</p>
   } @else {
     <div class="table-wrap">
-      <table mat-table [dataSource]="goalsOutlook()" class="pred-table data-table">
+      <table
+        mat-table
+        [dataSource]="sortedGoals()"
+        matSort
+        (matSortChange)="onGoalsSort($event)"
+        class="pred-table data-table"
+      >
         <ng-container matColumnDef="team">
-          <th mat-header-cell *matHeaderCellDef>Team</th>
+          <th mat-header-cell *matHeaderCellDef mat-sort-header="team">Team</th>
           <td mat-cell *matCellDef="let row; let i = index">
             <div class="team-cell">
               <span class="rank">{{ i + 1 }}</span>
@@ -230,7 +242,7 @@
           </td>
         </ng-container>
         <ng-container matColumnDef="overall">
-          <th mat-header-cell *matHeaderCellDef>Avg score%</th>
+          <th mat-header-cell *matHeaderCellDef mat-sort-header="overall">Avg score%</th>
           <td mat-cell *matCellDef="let row">{{ pct(row.avg_score_prob) | number: '1.0-1' }}%</td>
         </ng-container>
         <ng-container matColumnDef="fixtures">

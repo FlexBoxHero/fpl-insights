@@ -1,27 +1,55 @@
-import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { interval } from 'rxjs';
-import { ApiService } from '../core/api.service';
+import { GameweekStore } from '../core/gameweek.store';
 
 @Component({
   selector: 'app-deadline-banner',
   standalone: true,
   template: `
-    <div class="deadline" [class.urgent]="urgent()">
-      <span class="label">Next deadline</span>
-      <span class="value">{{ countdown() }}</span>
+    <div class="gw-chip" [class.urgent]="urgent()">
+      @if (gwNumber(); as n) {
+        <span class="meta">
+          <span class="gw">GW{{ n }}</span>
+          <span class="range long">{{ duration() }}</span>
+          <span class="range short">{{ durationShort() }}</span>
+        </span>
+        <span class="value">{{ countdown() }}</span>
+      } @else {
+        <span class="label">Next deadline</span>
+        <span class="value">{{ countdown() }}</span>
+      }
     </div>
   `,
   styles: `
-    .deadline {
+    .gw-chip {
       display: flex;
-      align-items: center;
-      gap: 0.5rem;
+      align-items: baseline;
+      gap: 0.7rem;
       padding: 0.35rem 0.85rem;
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.12);
+      background: var(--fpl-chip-bg);
+      color: var(--fpl-topbar-text);
       font-size: 0.85rem;
       white-space: nowrap;
+    }
+    .meta {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 0.45rem;
+      min-width: 0;
+    }
+    .gw {
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: var(--fpl-nav-active-text);
+    }
+    .range {
+      opacity: 0.9;
+      font-size: 0.78rem;
+    }
+    .range.short {
+      display: none;
     }
     .label {
       opacity: 0.85;
@@ -34,9 +62,20 @@ import { ApiService } from '../core/api.service';
       font-variant-numeric: tabular-nums;
     }
     @media (max-width: 840px) {
-      .deadline {
-        padding: 0.28rem 0.6rem;
+      .gw-chip {
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 0.05rem;
+        padding: 0.22rem 0.55rem 0.28rem;
+        border-radius: 12px;
         font-size: 0.78rem;
+      }
+      .range.long {
+        display: none;
+      }
+      .range.short {
+        display: inline;
+        font-size: 0.68rem;
       }
       .label {
         display: none;
@@ -49,42 +88,53 @@ import { ApiService } from '../core/api.service';
   `,
 })
 export class DeadlineBannerComponent implements OnInit {
-  private readonly api = inject(ApiService);
+  private readonly gwStore = inject(GameweekStore);
   private readonly destroyRef = inject(DestroyRef);
 
-  private deadlineMs: number | null = null;
   readonly countdown = signal('—');
   readonly urgent = signal(false);
 
-  ngOnInit(): void {
-    this.refreshDeadline();
-    interval(1000)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.tick());
-    interval(60_000)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.refreshDeadline());
-  }
+  readonly gwNumber = computed(() => this.gwStore.headerGameweek()?.number ?? null);
+  readonly duration = computed(() => {
+    const gw = this.gwStore.headerGameweek();
+    return formatGameweekSpan(gw?.first_kickoff, gw?.last_kickoff, gw?.deadline_time, false);
+  });
+  readonly durationShort = computed(() => {
+    const gw = this.gwStore.headerGameweek();
+    return formatGameweekSpan(gw?.first_kickoff, gw?.last_kickoff, gw?.deadline_time, true);
+  });
 
-  private refreshDeadline(): void {
-    this.api.getDeadline().subscribe({
-      next: (meta) => {
-        this.deadlineMs = meta.deadline_time ? Date.parse(meta.deadline_time) : null;
-        this.tick();
-      },
+  constructor() {
+    effect(() => {
+      this.gwStore.headerGameweek();
+      this.tick();
     });
   }
 
+  ngOnInit(): void {
+    interval(1000)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.tick());
+  }
+
   private tick(): void {
-    if (this.deadlineMs == null) {
+    const gw = this.gwStore.headerGameweek();
+    const deadlineIso = gw?.deadline_time;
+    if (!deadlineIso) {
       this.countdown.set('TBC');
       this.urgent.set(false);
       return;
     }
-    const diff = this.deadlineMs - Date.now();
+    const deadlineMs = Date.parse(deadlineIso);
+    if (Number.isNaN(deadlineMs)) {
+      this.countdown.set('TBC');
+      this.urgent.set(false);
+      return;
+    }
+    const diff = deadlineMs - Date.now();
     if (diff <= 0) {
-      this.countdown.set('Closed');
-      this.urgent.set(true);
+      this.countdown.set(gw?.finished ? 'Done' : 'Live');
+      this.urgent.set(!gw?.finished);
       return;
     }
     const totalSec = Math.floor(diff / 1000);
@@ -99,4 +149,41 @@ export class DeadlineBannerComponent implements OnInit {
     this.countdown.set(parts);
     this.urgent.set(diff < 3 * 60 * 60 * 1000);
   }
+}
+
+function parseIso(value: string | null | undefined): Date | null {
+  if (!value) {
+    return null;
+  }
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? null : new Date(ms);
+}
+
+export function formatGameweekSpan(
+  firstKickoff: string | null | undefined,
+  lastKickoff: string | null | undefined,
+  deadline: string | null | undefined,
+  compact: boolean,
+): string {
+  const start = parseIso(firstKickoff) ?? parseIso(deadline);
+  const end = parseIso(lastKickoff) ?? parseIso(firstKickoff);
+  if (!start) {
+    return 'Dates TBC';
+  }
+  if (!end || start.toDateString() === end.toDateString()) {
+    return formatDay(start, true, !compact);
+  }
+  const sameMonth = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth();
+  if (sameMonth) {
+    return `${formatDay(start, false, !compact)} – ${formatDay(end, true, !compact)}`;
+  }
+  return `${formatDay(start, true, !compact)} – ${formatDay(end, true, !compact)}`;
+}
+
+function formatDay(date: Date, withMonth: boolean, withWeekday: boolean): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    ...(withWeekday ? { weekday: 'short' as const } : {}),
+    day: 'numeric',
+    ...(withMonth ? { month: 'short' as const } : {}),
+  }).format(date);
 }

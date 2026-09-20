@@ -5,6 +5,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSliderModule } from '@angular/material/slider';
+import { MatSortModule, Sort } from '@angular/material/sort';
 import { MatTableModule } from '@angular/material/table';
 import { ApiService } from '../../core/api.service';
 import {
@@ -45,6 +46,7 @@ function defaultFdrCount(): number {
     MatFormFieldModule,
     MatSelectModule,
     MatSliderModule,
+    MatSortModule,
     DecimalPipe,
     NgClass,
     ClubMarkComponent,
@@ -72,6 +74,8 @@ export class TeamPredictionsComponent {
 
   readonly outlookGwCount = signal(3);
   readonly fdrSort = signal<FdrSort>('easiest');
+  readonly csSort = signal<Sort>({ active: 'overall', direction: 'desc' });
+  readonly goalsSort = signal<Sort>({ active: 'overall', direction: 'desc' });
   readonly openPill = signal<{ kind: MetricKind; teamId: number; index: number } | null>(null);
 
   readonly sortedFixtureRuns = computed(() => {
@@ -85,6 +89,9 @@ export class TeamPredictionsComponent {
     }
     return rows.sort((a, b) => a.overall_fdr - b.overall_fdr);
   });
+
+  readonly sortedCleanSheets = computed(() => sortMetricRows(this.cleanSheets(), this.csSort(), 'cs'));
+  readonly sortedGoals = computed(() => sortMetricRows(this.goalsOutlook(), this.goalsSort(), 'goals'));
 
   readonly fdrColumns = ['team', 'overall', 'fixtures'];
   readonly metricColumns = ['team', 'overall', 'fixtures'];
@@ -133,6 +140,14 @@ export class TeamPredictionsComponent {
   // Kept for when the CS/goals fixture sliders are re-enabled in the template.
   onOutlookCountChange(value: number): void {
     this.outlookGwCount.set(value);
+  }
+
+  onCsSort(sort: Sort): void {
+    this.csSort.set(sort);
+  }
+
+  onGoalsSort(sort: Sort): void {
+    this.goalsSort.set(sort);
   }
 
   fixtureChipLabel(fx: FixtureDifficultyCell | FixtureMetricCell): string {
@@ -217,4 +232,20 @@ export class TeamPredictionsComponent {
       },
     });
   }
+}
+
+function sortMetricRows(rows: TeamMetricRun[], sort: Sort, kind: MetricKind): TeamMetricRun[] {
+  const copy = [...rows];
+  if (!sort.active || !sort.direction) {
+    return copy;
+  }
+  const dir = sort.direction === 'asc' ? 1 : -1;
+  const value = (row: TeamMetricRun): number =>
+    kind === 'cs' ? (row.avg_clean_sheet_prob ?? 0) : (row.avg_score_prob ?? 0);
+  return copy.sort((a, b) => {
+    if (sort.active === 'team') {
+      return dir * a.team_name.localeCompare(b.team_name);
+    }
+    return dir * (value(a) - value(b));
+  });
 }

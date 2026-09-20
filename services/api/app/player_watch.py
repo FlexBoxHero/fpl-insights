@@ -6,6 +6,7 @@ import logging
 import re
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -18,6 +19,11 @@ from app.insights_service import _current_season, _full_name, _team_display
 logger = logging.getLogger(__name__)
 
 CACHE_TTL_SECONDS = 10 * 60
+OVERALL_LEAGUE_ID = 314
+CAPTAIN_SAMPLE_PAGES = 1
+CAPTAIN_SAMPLE_WORKERS = 8
+CAPTAIN_CACHE_TTL_SECONDS = 15 * 60
+MAX_CAPTAIN_ROWS = 8
 STATUS_LABELS = {"a": "Available", "d": "Doubtful", "i": "Injured", "s": "Suspended", "u": "Unavailable", "n": "Unavailable"}
 RETURN_RE = re.compile(
     r"(?:expected back|suspended until)\s+(\d{1,2}\s+[A-Za-z]{3,9})",
@@ -28,6 +34,9 @@ UNKNOWN_RETURN_RE = re.compile(r"unknown return date", re.IGNORECASE)
 _cache_lock = threading.Lock()
 _bootstrap_cache: dict[str, Any] | None = None
 _bootstrap_cached_at = 0.0
+_captain_lock = threading.Lock()
+_captain_cache: dict[str, Any] | None = None
+_captain_cached_at = 0.0
 
 
 def _as_float(value: object, default: float | None = None) -> float | None:
@@ -187,6 +196,122 @@ def _captain_event(events: list[dict[str, Any]]) -> dict[str, Any] | None:
     return nxt or current
 
 
+def _picks_event(events: list[dict[str, Any]]) -> dict[str, Any] | None:
+    current = next((ev for ev in events if ev.get("is_current")), None)
+    nxt = next((ev for ev in events if ev.get("is_next")), None)
+    if current and not current.get("finished"):
+        return current
+    return nxt or current
+
+
+def captain_rows_from_counts(
+    counts: dict[int, int],
+    sample_size: int,
+    by_id: dict[int, dict[str, Any]],
+    players: dict[int, Player],
+    teams_by_id: dict[int, Team],
+    teams_by_fpl: dict[int, Team],
+    bootstrap_teams: dict[int, dict[str, Any]],
+    official_id: int | None = None,
+    limit: int = MAX_CAPTAIN_ROWS,
+) -> list[dict[str, Any]]:
+    ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    rows: list[dict[str, Any]] = []
+    seen: set[int] = set()
+
+    def make_row(el: dict[str, Any], n: int, badge: str) -> dict[str, Any]:
+        row = _brief(el, players, teams_by_id, teams_by_fpl, bootstrap_teams)
+        pct = round(100.0 * n / sample_size, 1) if sample_size else None
+        row.update(
+            {
+                "badge": badge,
+                "ownership_pct": _as_float(el.get("selected_by_percent"), 0.0) or 0.0,
+                "captain_pct": pct,
+            }
+        )
+        return row
+
+    for element_id, n in ranked:
+        el = by_id.get(element_id)
+        if not el:
+            continue
+        badge = "Most captained" if official_id and element_id == official_id else "Captain pick"
+        rows.append(make_row(el, n, badge))
+        seen.add(element_id)
+        if len(rows) >= limit:
+            break
+    if official_id and official_id not in seen:
+        el = by_id.get(official_id)
+        if el:
+            row = make_row(el, counts.get(official_id, 0), "Most captained")
+            rows = [row, *rows][:limit]
+    return rows
+
+
+def _sample_overall_captains(event_id: int) -> tuple[dict[int, int], int] | None:
+    global _captain_cache, _captain_cached_at
+    now = time.time()
+    with _captain_lock:
+        if (
+            _captain_cache is not None
+            and now - _captain_cached_at < CAPTAIN_CACHE_TTL_SECONDS
+            and _captain_cache.get("event_id") == event_id
+        ):
+            return _captain_cache["counts"], int(_captain_cache["sample_size"])
+
+    standings_client = FplClient()
+    try:
+        entry_ids: list[int] = []
+        for page in range(1, CAPTAIN_SAMPLE_PAGES + 1):
+            data = standings_client.classic_league_standings(OVERALL_LEAGUE_ID, page)
+            if not data:
+                break
+            results = (data.get("standings") or {}).get("results") or []
+            for row in results:
+                entry = row.get("entry")
+                if entry:
+                    entry_ids.append(int(entry))
+    except Exception:
+        logger.warning("Could not load Overall standings for captain sample", exc_info=True)
+        entry_ids = []
+    finally:
+        standings_client.close()
+    if not entry_ids:
+        return None
+
+    counts: dict[int, int] = {}
+    sampled = 0
+
+    def fetch_picks(entry: int) -> dict[str, Any] | None:
+        client = FplClient(timeout=8.0)
+        try:
+            return client.entry_picks(entry, event_id)
+        except Exception:
+            return None
+        finally:
+            client.close()
+
+    with ThreadPoolExecutor(max_workers=CAPTAIN_SAMPLE_WORKERS) as pool:
+        futures = [pool.submit(fetch_picks, entry) for entry in entry_ids]
+        for fut in as_completed(futures):
+            picks = fut.result()
+            if not picks:
+                continue
+            sampled += 1
+            for pick in picks.get("picks") or []:
+                if pick.get("is_captain"):
+                    element_id = int(pick.get("element") or 0)
+                    if element_id:
+                        counts[element_id] = counts.get(element_id, 0) + 1
+                    break
+    if sampled == 0:
+        return None
+    with _captain_lock:
+        _captain_cache = {"event_id": event_id, "counts": counts, "sample_size": sampled}
+        _captain_cached_at = time.time()
+    return counts, sampled
+
+
 def _from_bootstrap(db: Session, bootstrap: dict[str, Any]) -> dict[str, Any]:
     elements = list(bootstrap.get("elements") or [])
     events = list(bootstrap.get("events") or [])
@@ -259,44 +384,56 @@ def _from_bootstrap(db: Session, bootstrap: dict[str, Any]) -> dict[str, Any]:
     )
 
     captained: list[dict[str, Any]] = []
-    event = _captain_event(events)
-    gameweek_number = int(event["id"]) if event else None
-    used: set[int] = set()
-    if event:
-        for element_id, badge in (
-            (event.get("most_captained"), "Most captained"),
-            (event.get("most_vice_captained"), "Most vice-captained"),
-        ):
-            if not element_id or int(element_id) in used:
-                continue
-            el = by_id.get(int(element_id))
-            if not el:
-                continue
+    selected: list[dict[str, Any]] = []
+    captain_sample_size = 0
+    picks_event = _picks_event(events)
+    official_event = _captain_event(events)
+    gameweek_number = int(picks_event["id"]) if picks_event else (
+        int(official_event["id"]) if official_event else None
+    )
+    official_id = None
+    if official_event and official_event.get("most_captained"):
+        official_id = int(official_event["most_captained"])
+    if gameweek_number:
+        sampled = _sample_overall_captains(gameweek_number)
+        if sampled:
+            counts, captain_sample_size = sampled
+            captained = captain_rows_from_counts(
+                counts,
+                captain_sample_size,
+                by_id,
+                players,
+                teams_by_id,
+                teams_by_fpl,
+                teams_boot,
+                official_id,
+            )
+    if not captained and official_id:
+        el = by_id.get(official_id)
+        if el:
             row = _brief(el, players, teams_by_id, teams_by_fpl, teams_boot)
             row.update(
                 {
-                    "badge": badge,
+                    "badge": "Most captained",
                     "ownership_pct": _as_float(el.get("selected_by_percent"), 0.0) or 0.0,
+                    "captain_pct": None,
                 }
             )
             captained.append(row)
-            used.add(int(element_id))
     owned = sorted(
-        (el for el in elements if int(el["id"]) not in used and str(el.get("status") or "a") != "u"),
+        (el for el in elements if str(el.get("status") or "a") != "u"),
         key=lambda el: -(_as_float(el.get("selected_by_percent"), 0.0) or 0.0),
     )
-    for el in owned:
-        if len(captained) >= 5:
-            break
+    for el in owned[:8]:
         row = _brief(el, players, teams_by_id, teams_by_fpl, teams_boot)
         row.update(
             {
-                "badge": "High ownership",
+                "badge": "Most selected",
                 "ownership_pct": _as_float(el.get("selected_by_percent"), 0.0) or 0.0,
+                "captain_pct": None,
             }
         )
-        captained.append(row)
-        used.add(int(el["id"]))
+        selected.append(row)
 
     price_rows: list[dict[str, Any]] = []
     calibrating = False
@@ -334,7 +471,9 @@ def _from_bootstrap(db: Session, bootstrap: dict[str, Any]) -> dict[str, Any]:
         "gameweek_number": gameweek_number,
         "injured": injured,
         "booked": booked,
-        "most_captained": captained[:5],
+        "most_captained": captained,
+        "most_selected": selected,
+        "captain_sample_size": captain_sample_size or None,
         "price_rises": rises,
         "price_falls": falls,
         "price_calibrating": calibrating,
@@ -350,6 +489,8 @@ def _from_db(db: Session) -> dict[str, Any]:
             "injured": [],
             "booked": [],
             "most_captained": [],
+            "most_selected": [],
+            "captain_sample_size": None,
             "price_rises": [],
             "price_falls": [],
             "price_calibrating": False,
@@ -430,12 +571,19 @@ def _from_db(db: Session) -> dict[str, Any]:
     owned = sorted(
         (pl for pl in players if pl.status != "u"),
         key=lambda pl: -pl.selected_by_percent,
-    )[:5]
-    captained = []
-    for pl in owned:
+    )
+    captained: list[dict[str, Any]] = []
+    selected: list[dict[str, Any]] = []
+    for pl in owned[:8]:
         row = brief_db(pl)
-        row.update({"badge": "High ownership", "ownership_pct": pl.selected_by_percent})
-        captained.append(row)
+        row.update(
+            {
+                "badge": "Most selected",
+                "ownership_pct": pl.selected_by_percent,
+                "captain_pct": None,
+            }
+        )
+        selected.append(row)
 
     price_rows = []
     calibrating = False
@@ -475,6 +623,8 @@ def _from_db(db: Session) -> dict[str, Any]:
         "injured": injured,
         "booked": booked,
         "most_captained": captained,
+        "most_selected": selected,
+        "captain_sample_size": None,
         "price_rises": rises,
         "price_falls": falls,
         "price_calibrating": calibrating,

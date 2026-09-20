@@ -18,6 +18,8 @@ from fpl_etl.bulk import (
     players_by_element,
     teams_by_fpl_id,
 )
+from fpl_etl.defcon_fields import defcon_stat_fields
+from fpl_etl.gw_stat_fields import extra_gw_stat_fields
 from fpl_etl.vaastav_backfill import ELEMENT_TYPE_MAP, _read_csv_bytes, _safe_float, _safe_int, ensure_season
 from fpl_shared.config import settings
 from fpl_shared.models import Fixture, Gameweek, Player, Team
@@ -262,6 +264,8 @@ def load_core_insights_season(db: Session, season_code: str) -> dict[str, int]:
                     "expected_goals": _safe_float(row.get("expected_goals") or row.get("xG")),
                     "expected_assists": _safe_float(row.get("expected_assists") or row.get("xA")),
                     "xP": _safe_float(row.get("xP")) if pd.notna(row.get("xP")) else None,
+                    **defcon_stat_fields(row.to_dict()),
+                    **extra_gw_stat_fields(row.to_dict()),
                 }
             )
             seen_stats.add(key)

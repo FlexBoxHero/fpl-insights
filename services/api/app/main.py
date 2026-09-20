@@ -4,7 +4,8 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app import insights_service
@@ -83,6 +84,23 @@ def list_gameweeks(db: Session = Depends(get_db)) -> list[GameweekOut]:
         .order_by(Gameweek.number)
         .all()
     )
+    kickoffs = {
+        number: (first, last)
+        for number, first, last in (
+            db.query(
+                Fixture.gameweek_number,
+                func.min(Fixture.kickoff_time),
+                func.max(Fixture.kickoff_time),
+            )
+            .filter(
+                Fixture.season_id == season.id,
+                Fixture.gameweek_number.isnot(None),
+                Fixture.kickoff_time.isnot(None),
+            )
+            .group_by(Fixture.gameweek_number)
+            .all()
+        )
+    }
     return [
         GameweekOut(
             id=gw.id,
@@ -92,6 +110,8 @@ def list_gameweeks(db: Session = Depends(get_db)) -> list[GameweekOut]:
             is_current=gw.is_current,
             is_next=gw.is_next,
             deadline_time=gw.deadline_time,
+            first_kickoff=kickoffs.get(gw.number, (None, None))[0],
+            last_kickoff=kickoffs.get(gw.number, (None, None))[1],
         )
         for gw in gws
     ]
@@ -193,6 +213,15 @@ def player_predictions(
     players = {pl.id: pl for pl in db.query(Player).filter(Player.id.in_(player_ids)).all()}
     team_ids = {pl.team_id for pl in players.values() if pl.team_id}
     teams = {t.id: t for t in db.query(Team).filter(Team.id.in_(team_ids)).all()}
+    season_id = next(iter(players.values())).season_id if players else None
+    gw_fixtures: list[Fixture] = []
+    if season_id is not None:
+        gw_fixtures = (
+            db.query(Fixture)
+            .filter(Fixture.season_id == season_id, Fixture.gameweek_number == gameweek)
+            .all()
+        )
+    fx_by_team = insights_service.fixtures_by_team(gw_fixtures)
     out: list[PlayerPredictionOut] = []
     for p in preds:
         pl = players.get(p.player_id)
@@ -208,6 +237,11 @@ def player_predictions(
             if pl.first_name and pl.second_name
             else pl.web_name
         )
+        opp = insights_service.opponent_summary(
+            fx_by_team.get(pl.team_id, []) if pl.team_id else [],
+            pl.team_id or -1,
+            teams,
+        )
         out.append(
             PlayerPredictionOut(
                 player_id=pl.id,
@@ -221,6 +255,7 @@ def player_predictions(
                 expected_points=p.expected_points,
                 baseline_last_gw=p.baseline_last_gw,
                 baseline_ep_next=p.baseline_ep_next,
+                **opp,
             )
         )
     return sorted(out, key=lambda x: -x.expected_points)
@@ -385,6 +420,21 @@ def model_meta(db: Session = Depends(get_db)) -> ModelMetaOut:
 SPA_DIR = Path(os.environ.get("SPA_DIR", REPO_ROOT / "apps" / "web" / "dist" / "web" / "browser"))
 
 
+def spa_response(full_path: str) -> FileResponse:
+    """Serve a built SPA file when it exists; otherwise index.html for Angular routes."""
+    spa_root = SPA_DIR.resolve()
+    index = spa_root / "index.html"
+    if not spa_root.is_dir() or not index.is_file():
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    requested = (spa_root / full_path).resolve()
+    if not requested.is_relative_to(spa_root):
+        raise HTTPException(status_code=404, detail="Not Found")
+    if requested.is_file():
+        return FileResponse(requested)
+    return FileResponse(index)
+
+
 def build_server() -> FastAPI:
     """Public process: /api/* plus the Angular SPA when a production build exists."""
     server = FastAPI(title="FPL Insights", version="0.1.0")
@@ -401,8 +451,11 @@ def build_server() -> FastAPI:
         return {"status": "ok"}
 
     server.mount("/api", app)
-    if SPA_DIR.is_dir():
-        server.mount("/", StaticFiles(directory=str(SPA_DIR), html=True), name="spa")
+
+    @server.api_route("/{full_path:path}", methods=["GET", "HEAD"])
+    def spa_fallback(full_path: str) -> FileResponse:
+        return spa_response(full_path)
+
     return server
 
 

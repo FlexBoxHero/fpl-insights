@@ -50,8 +50,18 @@ export class ChipStrategyComponent {
   readonly firstAvailable = signal<ChipId[]>([...ALL_CHIPS]);
   readonly loading = signal(false);
   readonly strategy = signal<ChipStrategy | null>(null);
+  readonly selectedChip = signal<ChipId | null>(null);
+  private selectionReady = false;
 
   readonly firstHalf = computed(() => this.strategy()?.first_half ?? null);
+  readonly selectedAdvice = computed(() => {
+    const half = this.firstHalf();
+    const chip = this.selectedChip();
+    if (!half || !chip) {
+      return null;
+    }
+    return this.chipAdvice(half, chip) ?? null;
+  });
 
   constructor() {
     const stored = this.readStored();
@@ -74,6 +84,17 @@ export class ChipStrategyComponent {
     this.firstAvailable.set(
       enabled ? this.addChip(current, chip) : current.filter((c) => c !== chip),
     );
+    if (!enabled && this.selectedChip() === chip) {
+      this.selectedChip.set(null);
+    }
+  }
+
+  selectPlanChip(chip: ChipId): void {
+    this.selectedChip.update((current) => (current === chip ? null : chip));
+  }
+
+  isSelected(chip: ChipId): boolean {
+    return this.selectedChip() === chip;
   }
 
   chipAdvice(half: ChipHalf, chip: ChipId): ChipAdvice | undefined {
@@ -120,6 +141,15 @@ export class ChipStrategyComponent {
     this.api.getChipStrategy(first, []).subscribe({
       next: (data) => {
         this.strategy.set(data);
+        const plan = data.first_half?.plan ?? [];
+        const ids = new Set(plan.map((step) => step.chip));
+        const current = this.selectedChip();
+        if (!this.selectionReady) {
+          this.selectedChip.set((plan[0]?.chip as ChipId | undefined) ?? null);
+          this.selectionReady = true;
+        } else if (current && !ids.has(current)) {
+          this.selectedChip.set(null);
+        }
         this.loading.set(false);
       },
       error: () => {

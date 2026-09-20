@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 from sqlalchemy.orm import Session
 
+from fpl_ml.defcon import PLAYER_MODEL_DEFCON_COLS, component_rolling_features
 from fpl_ml.team_model import (
     _expected_goals,
     previous_season_ratings_by_short_name,
@@ -61,6 +62,7 @@ FEATURE_COLS = [
     "lam_for",
     "lam_against",
     "opp_attack",
+    *PLAYER_MODEL_DEFCON_COLS,
 ]
 
 # FPL ep_next is a minutes-aware official baseline known at inference time.
@@ -132,6 +134,7 @@ def rolling_features(history: list[PlayerGameweekStat]) -> dict[str, float]:
         "roll3_assists": _mean(_attr_list(last3, "assists")),
         "roll5_cs": _mean(_attr_list(last5, "clean_sheets")),
         "baseline_last_gw": float(last_gw.total_points or 0),
+        **component_rolling_features(history),
     }
 
 

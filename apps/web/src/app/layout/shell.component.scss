@@ -1,7 +1,7 @@
 .topbar {
-  background: linear-gradient(135deg, #1a0533 0%, #2d0f4e 45%, #0d3b2e 100%);
-  color: #f4f0ff;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+  background: var(--fpl-topbar-bg);
+  color: var(--fpl-topbar-text);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18);
   position: fixed;
   top: 0;
   left: 0;
@@ -21,12 +21,24 @@
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
   font-weight: 700;
   font-size: 1.15rem;
   letter-spacing: -0.02em;
-  color: #fff;
+  color: var(--fpl-topbar-text);
   text-decoration: none;
   white-space: nowrap;
+}
+
+.brand-mark {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.4rem;
+  flex-shrink: 0;
+  display: block;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18), 0 2px 8px rgba(0, 0, 0, 0.22);
 }
 
 .nav {
@@ -34,7 +46,7 @@
   gap: 0.25rem;
 
   a {
-    color: rgba(255, 255, 255, 0.82);
+    color: var(--fpl-nav-link);
     text-decoration: none;
     padding: 0.4rem 0.75rem;
     border-radius: 8px;
@@ -43,12 +55,12 @@
     white-space: nowrap;
 
     &:hover {
-      background: rgba(255, 255, 255, 0.1);
+      background: var(--fpl-row-hover);
     }
 
     &.active {
-      background: rgba(0, 255, 135, 0.18);
-      color: #b8ffe0;
+      background: var(--fpl-nav-active-bg);
+      color: var(--fpl-nav-active-text);
       font-weight: 600;
     }
   }
@@ -56,7 +68,7 @@
 
 .about-mobile {
   display: none;
-  color: rgba(255, 255, 255, 0.82);
+  color: var(--fpl-nav-link);
   text-decoration: none;
   padding: 0.35rem 0.55rem;
   border-radius: 8px;
@@ -65,9 +77,31 @@
   flex-shrink: 0;
 
   &.active {
-    background: rgba(0, 255, 135, 0.18);
-    color: #b8ffe0;
+    background: var(--fpl-nav-active-bg);
+    color: var(--fpl-nav-active-text);
     font-weight: 600;
+  }
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--fpl-border);
+  border-radius: 999px;
+  background: var(--fpl-chip-bg);
+  color: var(--fpl-topbar-text);
+  cursor: pointer;
+  flex-shrink: 0;
+
+  .material-icons {
+    font-size: 1.15rem;
+  }
+
+  &:hover {
+    background: var(--fpl-nav-active-bg);
   }
 }
 
@@ -76,8 +110,9 @@
 }
 
 app-deadline-banner {
-  flex-shrink: 0;
-  max-width: 46%;
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 52%;
 }
 
 .content {
@@ -109,6 +144,16 @@ app-deadline-banner {
 
   .brand {
     font-size: 1.02rem;
+    gap: 0.4rem;
+  }
+
+  .theme-toggle {
+    width: 2rem;
+    height: 2rem;
+
+    .material-icons {
+      font-size: 1.05rem;
+    }
   }
 
   .content {
@@ -124,10 +169,10 @@ app-deadline-banner {
     bottom: 0;
     z-index: 1100;
     padding: 0.35rem 0.2rem calc(0.4rem + env(safe-area-inset-bottom));
-    background: rgba(18, 12, 32, 0.94);
+    background: var(--fpl-bottom-nav-bg);
     backdrop-filter: blur(14px);
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.28);
+    border-top: 1px solid var(--fpl-border);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.18);
 
     a {
       display: flex;
@@ -135,7 +180,7 @@ app-deadline-banner {
       justify-content: center;
       min-height: 2.75rem;
       padding: 0.35rem 0.15rem;
-      color: rgba(255, 255, 255, 0.72);
+      color: var(--fpl-nav-link);
       text-decoration: none;
       font-size: 0.72rem;
       font-weight: 650;
@@ -144,8 +189,8 @@ app-deadline-banner {
       text-align: center;
 
       &.active {
-        color: #b8ffe0;
-        background: rgba(0, 255, 135, 0.14);
+        color: var(--fpl-nav-active-text);
+        background: var(--fpl-nav-active-bg);
       }
     }
   }

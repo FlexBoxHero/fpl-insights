@@ -6,6 +6,8 @@ export interface Gameweek {
   is_current: boolean;
   is_next: boolean;
   deadline_time: string | null;
+  first_kickoff?: string | null;
+  last_kickoff?: string | null;
 }
 
 export interface TeamPrediction {
@@ -37,6 +39,9 @@ export interface PlayerPrediction {
   expected_points: number;
   baseline_last_gw: number | null;
   baseline_ep_next: number | null;
+  opponents?: string | null;
+  n_fixtures?: number;
+  is_home?: boolean | null;
 }
 
 export interface ModelMeta {
@@ -121,7 +126,10 @@ export interface DefensiveContrib {
   position: string;
   threshold: number;
   likelihood: number;
+  predicted_defcons: number;
   avg_minutes_last3: number;
+  avg_actions_last3?: number;
+  n_matches?: number;
 }
 
 export interface PlayerBrief {
@@ -156,8 +164,39 @@ export interface TopGwPlayer {
   bonus: number;
 }
 
+export interface DreamXiPlayer {
+  player_id: number;
+  web_name: string;
+  full_name?: string;
+  team: string;
+  team_name?: string | null;
+  team_code?: number | null;
+  position: string;
+  points: number;
+}
+
+export interface DreamXi {
+  gameweek: number;
+  formation: string;
+  total_points: number;
+  players: DreamXiPlayer[];
+}
+
+export interface PlayerOfTheWeek {
+  gameweek_number: number;
+  player_id?: number | null;
+  web_name?: string | null;
+  full_name?: string | null;
+  team?: string;
+  team_name?: string | null;
+  team_code?: number | null;
+  position?: string | null;
+  total_points?: number | null;
+}
+
 export interface HomeDashboard {
   last_gameweek: number;
+  season_label?: string;
   price_risers: PlayerBrief[];
   price_fallers: PlayerBrief[];
   transfers_in: PlayerBrief[];
@@ -167,6 +206,9 @@ export interface HomeDashboard {
   transfers_in_all_time: PlayerBrief[];
   transfers_out_all_time: PlayerBrief[];
   top_last_gameweek: TopGwPlayer[];
+  players_of_the_week?: PlayerOfTheWeek[];
+  team_of_the_week?: DreamXi | null;
+  team_of_the_season?: DreamXi | null;
 }
 
 export interface PlayerSeasonStat {
@@ -186,7 +228,20 @@ export interface PlayerSeasonStat {
   bps: number;
   expected_goals: number;
   expected_assists: number;
+  expected_goals_conceded?: number;
   gameweeks_played: number;
+  starts?: number;
+  subbed_in?: number;
+  clean_sheets?: number;
+  goals_conceded?: number;
+  ict_index?: number;
+  clearances_blocks_interceptions?: number;
+  tackles?: number;
+  recoveries?: number;
+  defensive_contribution?: number;
+  form?: number | null;
+  selected_by_percent?: number;
+  net_transfers?: number;
 }
 
 export interface DeadlineMeta {
@@ -379,6 +434,7 @@ export interface BookedRow extends PlayerWatchBrief {
 export interface CaptainedRow extends PlayerWatchBrief {
   badge: string;
   ownership_pct: number;
+  captain_pct?: number | null;
 }
 
 export interface PriceChangeRow extends PlayerWatchBrief {
@@ -396,6 +452,8 @@ export interface PlayerWatch {
   injured: InjuryRow[];
   booked: BookedRow[];
   most_captained: CaptainedRow[];
+  most_selected?: CaptainedRow[];
+  captain_sample_size?: number | null;
   price_rises: PriceChangeRow[];
   price_falls: PriceChangeRow[];
   price_calibrating: boolean;
